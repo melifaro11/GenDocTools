@@ -11,7 +11,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 - [Installation](#installation)
   - [Option 1: Using Pre-built Docker Image (Recommended)](#option-1-using-pre-built-docker-image-recommended)
   - [Option 2: Building from Source](#option-2-building-from-source)
-  - [Option 3: docker compose](#option-3-docker-compose)
+  - [Option 3: Docker Compose](#option-3-docker-compose)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
   - [MCP Configuration in Open Web UI](#mcp-configuration-in-open-web-ui)
@@ -104,37 +104,50 @@ docker run -d --restart unless-stopped \
   genfilesmcp
 ```
 
-### Option 3: docker compose
+### Option 3: Docker Compose
+ 
+If you want to build the image yourself (you have the Dockerfile and local dependencies):
 
-1a. If you need/want to build the image yourself (e.g. for ARM): 
+    * Clone the repository
 
-Clone the repository:
-```bash
+
+```shell
 git clone https://github.com/Baronco/GenFilesMCP.git
 cd GenFilesMCP
 ```
 
-Build the Docker image:
-```bash
-docker build -t genfilesmcp .
+    * Use the docker-compose.yml:
+
+
+```yaml
+services:
+genfilesmcp:
+    build:
+    context: .
+    dockerfile: Dockerfile
+    container_name: genfilesmcp
+    environment:
+    - ENABLE_CREATE_KNOWLEDGE=false
+    - OWUI_URL=http://open-webui:8080
+    - PORT=8015
 ```
 
-1b. If you don't need/want to build the image yourself, create a docker-compose.yml file with this content:
+If you only want to use the image published on GitHub, modify the docker-compose.yml:
+
 ```yaml
 services:
   genfilesmcp:
     image: ghcr.io/baronco/genfilesmcp:latest
     container_name: genfilesmcp
     environment:
-      - ENABLE_CREATE_KNOWLEDGE=false    # true/false
-      - OWUI_URL=http://open-webui:8080  # default name and port for OWUI with docker: http://open-webui:8080
-      - PORT=8015                        # Port used by genfilesmcp
-#    networks:                # open-webui and genfilesmcp must be on the same docker network, depending on your setup, default network is probably fine
-#      - ollama-tools
+      - ENABLE_CREATE_KNOWLEDGE=false
+      - OWUI_URL=http://open-webui:8080
+      - PORT=8015
 ```
 
-2. Start
-```bash
+Finally, run the Docker Compose setup:
+
+```shell
 docker compose up -d
 ```
 

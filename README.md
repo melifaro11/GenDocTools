@@ -108,7 +108,7 @@ docker run -d --restart unless-stopped \
  
 If you want to build the image yourself (you have the Dockerfile and local dependencies):
 
-    * Clone the repository
+- Clone the repository
 
 
 ```shell
@@ -116,7 +116,7 @@ git clone https://github.com/Baronco/GenFilesMCP.git
 cd GenFilesMCP
 ```
 
-    * Use the docker-compose.yml:
+- Use the docker-compose.yml:
 
 
 ```yaml

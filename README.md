@@ -11,6 +11,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 - [Installation](#installation)
   - [Option 1: Using Pre-built Docker Image (Recommended)](#option-1-using-pre-built-docker-image-recommended)
   - [Option 2: Building from Source](#option-2-building-from-source)
+  - [Option 3: Docker Compose](#option-3-docker-compose)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
   - [MCP Configuration in Open Web UI](#mcp-configuration-in-open-web-ui)
@@ -103,6 +104,53 @@ docker run -d --restart unless-stopped \
   genfilesmcp
 ```
 
+### Option 3: Docker Compose
+ 
+If you want to build the image yourself (you have the Dockerfile and local dependencies):
+
+- Clone the repository
+
+
+```shell
+git clone https://github.com/Baronco/GenFilesMCP.git
+cd GenFilesMCP
+```
+
+- Use the docker-compose.yml:
+
+
+```yaml
+services:
+genfilesmcp:
+    build:
+    context: .
+    dockerfile: Dockerfile
+    container_name: genfilesmcp
+    environment:
+    - ENABLE_CREATE_KNOWLEDGE=false
+    - OWUI_URL=http://open-webui:8080
+    - PORT=8015
+```
+
+If you only want to use the image published on GitHub, modify the docker-compose.yml:
+
+```yaml
+services:
+  genfilesmcp:
+    image: ghcr.io/baronco/genfilesmcp:latest
+    container_name: genfilesmcp
+    environment:
+      - ENABLE_CREATE_KNOWLEDGE=false
+      - OWUI_URL=http://open-webui:8080
+      - PORT=8015
+```
+
+Finally, run the Docker Compose setup:
+
+```shell
+docker compose up -d
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -119,7 +167,9 @@ The MCP server requires the following environment variables:
 
 **Important:** This version requires **Open Web UI version v0.6.31 or later** for native MCP support. MCPO is no longer supported.
 
-Configure the MCP directly in your Open Web UI "External Tools" settings. Set the type to "MCP Streamable HTTP".
+Configure the MCP directly in your Open Web UI "External Tools" settings. Set the type to "MCP Streamable HTTP" and Auth to "Session".
+
+When using docker-compose set URL to "http://genfilesmcp:8015/mcp"
 
 <div style="text-align: center;">
 
@@ -193,7 +243,7 @@ class Tools:
 
 This version integrates with Open Web UI's knowledge base system:
 
-- **Permission Requirement**: Administrators must enable the "Knowledge Access" permission in Workspace Permissions for default or group user permissions.
+- **Permission Requirement**: Administrators must enable the "Knowledge Access" permission in Workspace Permissions for default or group user permissions: -> Admin Panel -> Users -> Groups -> Default permissisons (or other Group). 
 
 <div style="text-align: center;">
 

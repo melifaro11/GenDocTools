@@ -83,7 +83,7 @@ async def generate_powerpoint(
         # Retrieve authorization header from the request context
         try:
             bearer_token = ctx.request_context.request.headers.get("authorization")
-            logger.info(f"Recieved authorization header!")
+            logger.info(f"Received authorization header!")
         except:
             logger.error(f"Error retrieving authorization header")
 
@@ -167,7 +167,7 @@ async def generate_excel(
         # Retrieve authorization header from the request context
         try:
             bearer_token = ctx.request_context.request.headers.get("authorization")
-            logger.info(f"Recieved authorization header!")
+            logger.info(f"Received authorization header!")
         except:
             logger.error(f"Error retrieving authorization header")
 
@@ -251,7 +251,7 @@ async def generate_word(
         # Retrieve authorization header from the request context
         try:
             bearer_token = ctx.request_context.request.headers.get("authorization")
-            logger.info(f"Recieved authorization header!")
+            logger.info(f"Received authorization header!")
         except:
             logger.error(f"Error retrieving authorization header")
 
@@ -335,7 +335,7 @@ async def generate_markdown(
         # Retrieve authorization header from the request context
         try:
             bearer_token = ctx.request_context.request.headers.get("authorization")
-            logger.info(f"Recieved authorization header!")
+            logger.info(f"Received authorization header!")
         except:
             logger.error(f"Error retrieving authorization header")
 
@@ -404,7 +404,7 @@ async def full_context_docx(
     # Retrieve authorization header from the request context
     try:
         bearer_token = ctx.request_context.request.headers.get("authorization")
-        logger.info(f"Recieved authorization header!")
+        logger.info(f"Received authorization header!")
     except:
         logger.error(f"Error retrieving authorization header")
 
@@ -501,7 +501,7 @@ async def review_docx(
     # Retrieve authorization header from the request context
     try:
         bearer_token = ctx.request_context.request.headers.get("authorization")
-        logger.info(f"Recieved authorization header!")
+        logger.info(f"Received authorization header!")
     except:
         logger.error(f"Error retrieving authorization header")
 

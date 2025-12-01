@@ -1,8 +1,37 @@
 from requests import post, get
 from json import dumps
+from io import BytesIO
 import logging
 logging.basicConfig(level=logging.INFO, force=True)
 logger = logging.getLogger("GenFilesMCP")
+from collections import defaultdict
+
+def transform_list_of_knowledge_to_dict(knowledge_list: list) -> dict:
+    """
+    Transform a list of knowledge items into a nested dictionary structure.
+    Args:
+        knowledge_list (list): A list of knowledge items, each represented as a dictionary.
+    Returns:
+        dict: A nested dictionary where the first key is user_id, the second key is knowledge_name,
+              and the value is a dictionary with knowledge_id and files_ids.
+    """
+    # Initialize the new dictionary
+    knowledge_new_dict = defaultdict(defaultdict)
+
+    # Iterate through each knowledge item in the list
+    for element in knowledge_list:
+        user_id = element['user_id']
+        knowledge_id = element['id']
+        knowledge_name = element['name']
+        files_ids = element.get('data', []).get('file_ids',[])
+        
+        # Main key is user_id, secondary key is knowledge_name
+        knowledge_new_dict[user_id][knowledge_name] = {
+            'knowledge_id': knowledge_id,
+            'files_ids': files_ids
+        }
+        
+    return knowledge_new_dict
 
 def check_knowledge_exists(url: str, token: str) -> dict:
     """
@@ -28,12 +57,13 @@ def check_knowledge_exists(url: str, token: str) -> dict:
     response = get(endpoint, headers=headers)
     
     if response.status_code != 200:
+        logger.error(f"Error fetching knowledge list, status code =>  {response.status_code}")
         return dumps({"error":{"message": f'Error creating knowledge'}})
     elif response.status_code == 200:
         # Parse the JSON response to get the list of knowledge items
         knowledge_list = response.json()
-        knowledge_dict = {f"{k['name']}_{k['user_id']}":{'knowledge_id': k['id'], 'user_id': k['user_id']} for k in knowledge_list}
-        logger.info(f"Knowledge items fetched successfully:  {knowledge_dict}")
+        knowledge_dict = transform_list_of_knowledge_to_dict(knowledge_list)
+        logger.info("Knowledge items fetched successfully")
         return knowledge_dict
     
 def add_file_to_knowledge(url: str, token: str, knowledge_id: str, file_id: str) -> bool:
@@ -68,7 +98,7 @@ def add_file_to_knowledge(url: str, token: str, knowledge_id: str, file_id: str)
         logger.info("File added to knowledge base successfully.")
         return True
     else:
-        logger.error(f"Error adding file to knowledge base")
+        logger.error(f"Error adding file to knowledge base, status code => {response.status_code}")
         return False
     
 def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge_name: str = 'My Generated Files') -> bool:
@@ -91,25 +121,27 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
     if not isinstance(knowledge_dicts, dict):
         logger.error("Failed to check knowledge exists")
         return False
-    
-    # If it exists, do nothing; otherwise, create it
-    if f'{knowledge_name}_{user_id}' in knowledge_dicts.keys() and knowledge_dicts[f'{knowledge_name}_{user_id}']['user_id'] == user_id:
 
-        # # get the knowledge id of the correct user 
-        # objective_knowledge_id = '00000000-0000-0000-0000-000000000000'
+    # If it exists, do nothing; otherwise, create it.
+    # knowledge_dicts is expected to be: {user_id: {knowledge_name: {'knowledge_id': ..., 'files_ids': [...]}}}
+    if knowledge_dicts.get(user_id, {}).get(knowledge_name):
 
-        # # Find the knowledge ID for the specified user
-        # for k, v in knowledge_dicts.items():
-        #     if k == knowledge_name and v['user_id'] == user_id:
-        #         objective_knowledge_id = v['knowledge_id']
+        # check if the file is already present
+        current_files = knowledge_dicts[user_id][knowledge_name].get('files_ids', [])
 
-        # Add the uploaded file to the knowledge base
-        add_file_state = add_file_to_knowledge(
-            url=url, 
-            token=token, 
-            knowledge_id=knowledge_dicts[f'{knowledge_name}_{user_id}']['knowledge_id'], 
-            file_id=file_id
-        )
+        if file_id in current_files:
+            logger.info(f"File {file_id} already exists in knowledge base. No action taken.")
+            return True
+        else:
+            logger.info(f"File {file_id} not found in knowledge base {knowledge_name}. Proceeding to add the file.")
+
+            # Add the uploaded file to the knowledge base
+            add_file_state = add_file_to_knowledge(
+                url=url,
+                token=token,
+                knowledge_id=knowledge_dicts[user_id][knowledge_name]['knowledge_id'],
+                file_id=file_id
+            )
         logger.info("Knowledge base already exists. Added file to existing knowledge base of user.")
 
         return add_file_state
@@ -160,5 +192,4 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
             return True
         else:
             logger.error(f"Error creating knowledge base")
-            return False
- 
+            return False 

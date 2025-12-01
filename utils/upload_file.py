@@ -38,8 +38,11 @@ def upload_file(url: str, token: str, file_data: BytesIO, filename:str, file_typ
     # Handle file_like: assume it's a file-like object (e.g., BytesIO) with .name attribute set
     files = {'file': (f"{filename}.{file_type}", file_data, mime_type)}
 
-    response = post(url, headers=headers, files=files)
+    # params for the request
+    params={"process": "true", "process_in_background": "false"}
 
+    # Make the POST request to upload the file
+    response = post(url, headers=headers, files=files, params=params, timeout=60)
 
     if response.status_code != 200:
        return dumps({"error":{"message": f'Error uploading file: {response.status_code}, {response.text}'}}), response

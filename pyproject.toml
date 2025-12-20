@@ -16,4 +16,4 @@ dependencies = [
 ]
 
 [project.scripts]
-genfilesmcp = "server:main"
+genfilesmcp = "server.server:main"

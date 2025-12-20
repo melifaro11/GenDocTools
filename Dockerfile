@@ -17,8 +17,9 @@ COPY pyproject.toml ./
 COPY uv.lock ./
 
 # Copy template directorie into the container
-COPY template/ ./template/
+COPY src/ ./src/
 COPY utils/ ./utils/
+COPY tools/ ./tools/
 
 # Install dependencies using UV, leveraging cache for faster builds
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -31,5 +32,16 @@ COPY server.py .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen
 
-# Set the default command to run the server using UV
+# Create an unprivileged user and ensure the application directory is owned by that user.
+# Build steps above run as root (needed for package installation). At runtime we drop to
+# the unprivileged `app` user to reduce risk from container compromise.
+RUN groupadd -r app \
+    && useradd -r -g app -d /home/app -m -s /bin/bash app \
+    && chown -R app:app /app
+
+# Set HOME and switch to the unprivileged user for runtime
+ENV HOME=/home/app
+USER app
+
+# Set the default command to run the server using UV (runs as non-root user `app`)
 CMD ["uv", "run", "server.py"]

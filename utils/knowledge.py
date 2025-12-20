@@ -1,3 +1,7 @@
+"""
+Utility functions for managing knowledge bases on the server.
+"""
+
 from requests import post, get
 from json import dumps
 from io import BytesIO

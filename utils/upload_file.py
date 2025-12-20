@@ -1,3 +1,7 @@
+"""
+Utility functions for uploading files to the server.
+"""
+
 from requests import post
 from json import dumps
 from io import BytesIO

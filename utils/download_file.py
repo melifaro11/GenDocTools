@@ -1,3 +1,7 @@
+"""
+Utility functions for downloading files from the server.
+"""
+
 from requests import get
 from io import BytesIO
 

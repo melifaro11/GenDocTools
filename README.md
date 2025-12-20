@@ -1,4 +1,3 @@
-
 # GenFilesMCP 🧩
 
 GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This MCP executes Python templates to produce files, uploads them to an Open Web UI (OWUI) endpoint, and stores them in the user's personal knowledge base. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
@@ -18,6 +17,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 - [Setup for Document Generation and Review Features](#setup-for-document-generation-and-review-features)
   - [Knowledge Base and Permissions](#knowledge-base-and-permissions)
   - [MCP Server Document Upload Settings](#mcp-server-document-upload-settings)
+- [Using GenFilesMCP with MCPO in STDIO Mode](#using-genfilesmcp-with-mcpo-in-stdio-mode)
 - [Usage Examples](#usage-examples)
   - [Example 1: Generating a DOCX file](#example-1-generating-a-docx-file)
   - [Example 2: Reviewing a DOCX file with comments](#example-2-reviewing-a-docx-file-with-comments)
@@ -35,7 +35,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 
 ## Status
 
-This release is **v0.2.2**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG.
+This release is **v0.3.0-alpha.1**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG.
 
 The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated or reviewed files are automatically added to users' knowledge collections. The original behavior (downloading files from chats) remains unchanged for end users.
 
@@ -54,7 +54,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 Pull the pre-built Docker image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/baronco/genfilesmcp:v0.2.2
+docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.1
 ```
 
 Run the container:
@@ -65,7 +65,7 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e PORT=YOUR_PORT \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:v0.2.2
+  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.1
 ```
 
 Alternatively, use the `:latest` tag for the most recent version:
@@ -155,6 +155,34 @@ Finally, run the Docker Compose setup:
 docker compose up -d
 ```
 
+### Using GenFilesMCP with MCPO in STDIO Mode
+
+To use the GenFilesMCP server in `stdio` mode with MCPO, you need to add it to the `config.json` file. Below is an example configuration:
+
+```json
+{
+  "mcpServers": {
+    "GenFilesMCP": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Baronco/GenFilesMCP.git@dev",
+        "genfilesmcp"
+      ],
+      "env": {
+        "OWUI_URL": "http://host.docker.internal:3000",
+        "PORT": "8015",
+        "ENABLE_CREATE_KNOWLEDGE": "false",
+        "HTTP_TRANSPORT": "true"
+      }
+    }
+  }
+}
+```
+
+- Replace the `env` values with the appropriate settings for your environment.
+- For more information about MCPO, refer to the [MCPO repository](https://github.com/open-webui/mcpo).
+
 ## Configuration
 
 ### Environment Variables
@@ -166,6 +194,7 @@ The MCP server requires the following environment variables:
 | `OWUI_URL` | URL of your Open Web UI instance | `http://host.docker.internal:3000` |
 | `PORT` | Port where the MCP server will listen | `8015` |
 | `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are automatically added to users' knowledge collections. Set to `true` to enable automatic creation/updating of knowledge collections; set to `false` to disable that behavior and preserve RAG workflows (recommended default for RAG users). NOTE: If `ENABLE_CREATE_KNOWLEDGE=true`, it is mandatory to enable the Open Web UI document option `Bypass Embedding and Retrieval`. | `false` |
+| `HTTP_TRANSPORT` | Determines the transport mode for the MCP server. Set to `true` for `streamable-http` (default) or `false` for `stdio`. | `true` |
 
 ### MCP Configuration in Open Web UI
 
@@ -191,7 +220,7 @@ These features require additional setup in Open Web UI:
 
 ### Prerequisites
 
-1. Create a mandatory custom tool called `chat_context` in Open Web UI to retrieve user and file metadata
+1. Create a mandatory custom tool called `chat_context` in Open Web UI to retrieve file metadata
 
 ### Creating the chat_context Tool
 
@@ -211,20 +240,12 @@ class Tools:
 
     # Add your custom tools using pure Python code here, make sure to add type hints and descriptions
 
-    def chat_context(self, __files__: dict = {}, __user__: dict = {}) -> dict:
+    def chat_context(self, __files__: dict = {}) -> dict:
         """
         Get files metadata and get the user Email and user ID from the user object.
         """
         # id and name of current files
-        chat_context = {"files": [], "user_id": None, "user_email": None}
-
-        # user data
-        if "id" in __user__:
-            chat_context["user_id"] = __user__["id"]
-        if "email" in __user__:
-            chat_context["user_email"] = __user__["email"]
-        if chat_context["user_id"] is None:
-            chat_context = {"error": "User: Unknown"}
+        chat_context = {"files": []}
 
         # files metadata
         if __files__:

@@ -11,20 +11,14 @@ from openpyxl import Workbook
 # Buffer to save excel file, previously defined in the server.py file
 XLSX_BUFFER = xlsx_buffer # Do not modify this line, it is defined in the server.py file
 
-def excel():
-    # Initialize a new Workbook instance
-    wb = Workbook()
+# Initialize a new Workbook instance
+wb = Workbook()
 
-    # Apply the required data transformations to build the Excel workbook based on the user's request.
-    # Create the necessary worksheets, populate tables, add charts, and format cells for clarity and visual appeal.
+# Apply the required data transformations to build the Excel workbook based on the user's request.
+# Create the necessary worksheets, populate tables, add charts, and format cells for clarity and visual appeal.
 
-    # Save the Excel workbook
-    wb.save(XLSX_BUFFER) # Do not modify this line, it is defined in the server.py file
-
-    return f"Excel file created successfully!"
-
-# Invoke the function to generate the Excel file
-excel()
+# Save the Excel workbook
+wb.save(XLSX_BUFFER) # Do not modify this line, it is defined in the server.py file
 ```
 
 Provide a complete Python script following this template to generate your Excel workbook.

@@ -10,46 +10,61 @@ logging.basicConfig(level=logging.INFO, force=True)
 logger = logging.getLogger("GenFilesMCP")
 from collections import defaultdict
 
-def transform_list_of_knowledge_to_dict(knowledge_list: list) -> dict:
+def transform_list_of_knowledge_to_dict(knowledge_list) -> dict:
     """
-    Transform a list of knowledge items into a nested dictionary structure.
+    Transform a list or paginated response of knowledge items into a nested dictionary.
     Args:
-        knowledge_list (list): A list of knowledge items, each represented as a dictionary.
+        knowledge_list (list or dict): Either a list of knowledge items or a paginated response
+            dict containing an "items" list.
     Returns:
         dict: A nested dictionary where the first key is user_id, the second key is knowledge_name,
               and the value is a dictionary with knowledge_id and files_ids.
     """
+    # Normalize input to a list of items
+    if isinstance(knowledge_list, dict) and 'items' in knowledge_list:
+        items = knowledge_list.get('items', [])
+    else:
+        items = knowledge_list or []
+
     # Initialize the new dictionary
     knowledge_new_dict = defaultdict(defaultdict)
 
     # Iterate through each knowledge item in the list
-    for element in knowledge_list:
-        user_id = element['user_id']
-        knowledge_id = element['id']
-        knowledge_name = element['name']
-        files_ids = element.get('data', {}).get('file_ids',[])
-        
+    for element in items:
+        user_id = element.get('user_id')
+        knowledge_id = element.get('id')
+        knowledge_name = element.get('name')
+        files_ids = element.get('data', {}).get('file_ids', [])
+
+        if user_id is None or knowledge_name is None or knowledge_id is None:
+            # skip malformed entries
+            continue
+
         # Main key is user_id, secondary key is knowledge_name
         knowledge_new_dict[user_id][knowledge_name] = {
             'knowledge_id': knowledge_id,
             'files_ids': files_ids
         }
-        
+
     return knowledge_new_dict
 
-def check_knowledge_exists(url: str, token: str) -> dict:
+def check_knowledge_exists(url: str, token: str, query: str = None) -> dict:
     """
     Check if knowledge items exist at the specified URL with the provided token.
-    
+    Uses the paginated search endpoint (`/api/v1/knowledge/search`) and supports an optional
+    `query` parameter (e.g. a `knowledge_name`) to narrow results. It will paginate through
+    results until all items are fetched or until no more pages are available.
+
     Args:
         url (str): The base URL to check for knowledge items.
         token (str): The authorization token for the request.
+        query (str, optional): Search query to filter knowledge items (e.g. knowledge name).
+
     Returns:
-        dict: A dictionary mapping knowledge item names to their IDs.
+        dict: A nested dictionary mapping user_id -> knowledge_name -> {knowledge_id, files_ids}.
     """
 
-    # Ensure the URL ends with '/api/v1/knowledge/list'
-    endpoint = f'{url}/api/v1/knowledge/list'
+    endpoint = f'{url}/api/v1/knowledge/search'
 
     # Prepare headers for the request
     headers = {
@@ -57,18 +72,54 @@ def check_knowledge_exists(url: str, token: str) -> dict:
         'Accept': 'application/json'
     }
 
-    # Make the GET request to fetch the knowledge list
-    response = get(endpoint, headers=headers)
-    
-    if response.status_code != 200:
-        logger.error(f"Error fetching knowledge list, status code =>  {response.status_code}")
-        return dumps({"error":{"message": f'Error creating knowledge'}})
-    elif response.status_code == 200:
-        # Parse the JSON response to get the list of knowledge items
-        knowledge_list = response.json()
-        knowledge_dict = transform_list_of_knowledge_to_dict(knowledge_list)
-        logger.info("Knowledge items fetched successfully")
-        return knowledge_dict
+    aggregated_items = []
+    page = 1
+
+    while True:
+        params = {'page': page}
+        if query:
+            params['query'] = query
+
+        response = get(endpoint, headers=headers, params=params)
+
+        if response.status_code != 200:
+            logger.error(f"Error fetching knowledge list (page {page}), status code => {response.status_code}")
+            # Return None to indicate failure so callers can detect and handle it
+            return None
+
+        data = response.json()
+
+        # Support multiple response shapes: paginated dict with 'items' or plain list
+        if isinstance(data, dict) and 'items' in data:
+            items = data.get('items', [])
+            total = data.get('total')
+        elif isinstance(data, list):
+            items = data
+            total = None
+        else:
+            items = []
+            total = None
+
+        aggregated_items.extend(items)
+
+        # If total is provided, stop when we've collected them all
+        if total is not None:
+            if len(aggregated_items) >= total:
+                break
+            else:
+                page += 1
+                continue
+
+        # Otherwise, rely on the page size heuristic: if a page returns fewer than 30 items,
+        # it's likely the last page (the API max page size is 30)
+        if not items or len(items) < 30:
+            break
+
+        page += 1
+
+    knowledge_dict = transform_list_of_knowledge_to_dict(aggregated_items)
+    logger.info("Knowledge items fetched successfully")
+    return knowledge_dict
     
 def add_file_to_knowledge(url: str, token: str, knowledge_id: str, file_id: str) -> bool:
     """
@@ -119,8 +170,8 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
     Returns:
         bool: True if the knowledge item was created, False otherwise.
     """
-    # Check if the knowledge item already exists
-    knowledge_dicts = check_knowledge_exists(url, token)
+    # Check if the knowledge item already exists using the search query (knowledge name)
+    knowledge_dicts = check_knowledge_exists(url, token, query=knowledge_name)
     
     if not isinstance(knowledge_dicts, dict):
         logger.error("Failed to check knowledge exists")

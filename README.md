@@ -35,7 +35,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 
 ## Status
 
-This release is **v0.3.0-alpha.1**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG.
+This release is **v0.3.0-alpha.1**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG. **Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
 
 The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated or reviewed files are automatically added to users' knowledge collections. The original behavior (downloading files from chats) remains unchanged for end users.
 
@@ -44,7 +44,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 ## Prerequisites
 
 - **Docker** installed on your system
-- **Open Web UI** instance running (v0.6.31 or later for native MCP support)
+- **Open Web UI** instance running (v0.6.42 or later for native MCP support; for older OWUI versions use GenFilesMCP **<= 0.2.2**) 
 - Administrators must enable "Knowledge Access" permission in Workspace Permissions for default or group user permissions
 
 ## Installation
@@ -157,6 +157,8 @@ docker compose up -d
 
 ### Using GenFilesMCP with MCPO in STDIO Mode
 
+**Note:** This alpha is not compatible with MCPO. Compatibility depends on approval of https://github.com/open-webui/mcpo/pull/273 which would enable passing per-session bearer tokens via headers to MCPO.
+
 To use the GenFilesMCP server in `stdio` mode with MCPO, you need to add it to the `config.json` file. Below is an example configuration:
 
 ```json
@@ -198,7 +200,7 @@ The MCP server requires the following environment variables:
 
 ### MCP Configuration in Open Web UI
 
-**Important:** This version requires **Open Web UI version v0.6.31 or later** for native MCP support. MCPO is no longer supported.
+**Important:** This alpha release requires **Open Web UI version v0.6.42 or later** for native MCP support due to a change in the knowledge API (now `/api/v1/knowledge/search`, paginated). For Open Web UI versions older than v0.6.42, use GenFilesMCP releases **<= 0.2.2**. This alpha is not compatible with MCPO; compatibility depends on approval of https://github.com/open-webui/mcpo/pull/273 (which would allow passing per-session bearer tokens via headers to MCPO). MCPO is no longer supported.
 
 Configure the MCP directly in your Open Web UI "External Tools" settings. Set the type to "MCP Streamable HTTP" and Auth to "Session".
 

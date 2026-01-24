@@ -35,7 +35,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 
 ## Status
 
-This release is **v0.3.0-alpha.2**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG. **Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
+This release is **v0.3.0-alpha.3**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG. **Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
 
 The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated or reviewed files are automatically added to users' knowledge collections. The original behavior (downloading files from chats) remains unchanged for end users.
 
@@ -54,7 +54,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 Pull the pre-built Docker image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.2
+docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.3
 ```
 
 Run the container:
@@ -65,7 +65,7 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e PORT=YOUR_PORT \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.2
+  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.3
 ```
 
 Alternatively, use the `:latest` tag for the most recent version:

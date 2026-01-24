@@ -244,3 +244,62 @@ def review_docx(file_id, file_name, review_comments, ctx, URL, ENABLE_CREATE_KNO
 
     except Exception as e:
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)
+
+def generate_word_from_template(doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
+    """
+    Generate a Word document from a validated structured dictionary.
+
+    Returns:
+        dict: Contains 'file_path_download' with a markdown hyperlink for downloading the generated Word file.
+    """
+    try:
+        # Convert Pydantic model to dict
+        doc_data = doc_dict.model_dump()
+        
+        # Create buffer
+        buffer = BytesIO()
+        buffer.name = f'{file_name}.docx'
+        
+        # Build the document
+        from utils.document_builder import build_docx_from_dict
+        buffer = build_docx_from_dict(doc_data, buffer, ctx, URL)
+        
+        # Upload the file
+        bearer_token = _get_bearer_token(ctx)
+        if bearer_token:
+            logger.info("Received authorization header")
+        else:
+            logger.debug("Authorization header not present")
+
+        user_id = get_user_id(URL, bearer_token)
+        if not user_id:
+            return dumps({"error": {"message": "Error obtaining user id from token"}}, indent=4, ensure_ascii=False)
+
+        response, request_data = upload_file(
+            url=URL, 
+            token=bearer_token, 
+            file_data=buffer,
+            filename=file_name,
+            file_type="docx"
+        )
+
+        if "file_path_download" in response and ENABLE_CREATE_KNOWLEDGE:
+            create_knowledge_status = create_knowledge(
+                url=URL,
+                token=bearer_token,
+                file_id=request_data['id'],
+                user_id=user_id
+            )
+            if create_knowledge_status:
+                logger.info("Knowledge base updated successfully.")
+            else:
+                logger.error("Error creating or updating knowledge base")
+        elif "error" in response:
+            logger.error("Error uploading the file.")
+        else:
+            logger.info("Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
+
+        return response
+
+    except Exception as e:
+        return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)

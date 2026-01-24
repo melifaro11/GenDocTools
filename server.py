@@ -16,7 +16,7 @@ from pathlib import Path
 from io import BytesIO
 import logging
 logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("GenFilesMCP")
+logger = logging.getLogger("GenDocsServer")
 
 # Third-party libraries
 from pydantic import Field, BaseModel
@@ -38,7 +38,7 @@ from tools.powerpoint_tool import generate_powerpoint as _generate_powerpoint
 from tools.excel_tool import generate_excel as _generate_excel
 from tools.docx_tool import generate_word as _generate_word
 from tools.markdown_tool import generate_markdown as _generate_markdown
-from tools.docx_tool import full_context_docx as _full_context_docx, review_docx as _review_docx
+from tools.docx_tool import full_context_docx as _full_context_docx, review_docx as _review_docx, generate_word_from_template as _generate_word_from_template
 
 # Parameters
 URL = getenv('OWUI_URL', '')
@@ -58,10 +58,62 @@ class ReviewComment(BaseModel):
 class ImagesList(BaseModel):
     images: str
 
+# Pydantic models for document schema validation
+class Metadata(BaseModel):
+    title: str
+    subtitle: str
+    description: str
+    author: str
+    month: str
+    year: str
+
+class Paragraph(BaseModel):
+    text: str
+    bold: bool = False
+    italic: bool = False
+    alignment: str = "justify"
+
+class ListItem(BaseModel):
+    style: str  # e.g., "bullet" or "number"
+    items: List[str]
+    alignment: str = None
+
+class Table(BaseModel):
+    headers: List[str]
+    rows: List[List[str]]
+    caption: str = None
+
+class Image(BaseModel):
+    id: str
+    width: float = 6.0
+    height: float = 4.0
+    alignment: str = None
+    caption: str = None
+
+class Equation(BaseModel):
+    latex: str
+    caption: str = None
+
+class Section(BaseModel):
+    title: str
+    level: int = 2
+    alignment: str = None
+    columns: int = None
+    paragraphs: List[Paragraph] = None
+    lists: List[ListItem] = None
+    tables: List[Table] = None
+    images: List[Image] = None
+    equations: List[Equation] = None
+
+class DocumentDict(BaseModel):
+    font: str = "Arial"
+    metadata: Metadata
+    sections: List[Section]
+
 # Initialize FastMCP server
 mcp = FastMCP(
-    name = "GenFilesMCP",
-    instructions = MCP_INSTRUCTIONS,   
+    name = "GenDocsServer",
+    instructions = MCP_INSTRUCTIONS,
     port = PORT,
     host = "0.0.0.0"
 )
@@ -99,21 +151,37 @@ async def generate_excel(
     return _generate_excel(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
 
 # Mcp tool definitions
+# @mcp.tool(
+#     name="generate_word",
+#     title="Generate Word document",
+#     description=WORD_TEMPLATE,
+#     annotations=ToolAnnotations(destructiveHint=False)
+# )
+# async def generate_word(
+#     ctx: Context[ServerSession, None],
+#     python_script: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])],
+#     file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])],
+#     images_list: Annotated[List[str], Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["images_list"])] = []):
+#     """
+#     Generate a Word document using the provided AI-generated Python script. The images_list argument provides a list of image file IDs to be included in the document.
+#     """
+#     return _generate_word(python_script, file_name, images_list, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+
+# Mcp tool definitions
 @mcp.tool(
     name="generate_word",
-    title="Generate Word document",
-    description=WORD_TEMPLATE,
+    title="Generate Word document from structured template dictionary",
+    description="Generate a Word document using a structured dictionary schema with metadata, sections, paragraphs, lists, tables, images, and equations. The schema is validated using Pydantic models.",
     annotations=ToolAnnotations(destructiveHint=False)
 )
-async def generate_word(
+async def generate_word_from_dict(
     ctx: Context[ServerSession, None],
-    python_script: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])],
-    images_list: Annotated[List[str], Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["images_list"])] = []):
+    doc_dict: Annotated[DocumentDict, Field(description="Structured dictionary defining the document content, including metadata and sections with paragraphs, lists, tables, images, and equations.")],
+    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])]):
     """
-    Generate a Word document using the provided AI-generated Python script. The images_list argument provides a list of image file IDs to be included in the document.
+    Generate a Word document from a validated structured dictionary.
     """
-    return _generate_word(python_script, file_name, images_list, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+    return _generate_word_from_template(doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
 
 # Mcp tool definitions
 @mcp.tool(

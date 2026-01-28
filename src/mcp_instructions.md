@@ -1,5 +1,6 @@
 This server provides tools specialized in generating `.docx`, `.xlsx`, `.md`, `.pptx` and reviewing `.docx` documents.
 
+
 # Tools
 ### `generate_excel`
 - Use clear headers, freeze top rows, and enable filters where appropriate.
@@ -8,14 +9,20 @@ This server provides tools specialized in generating `.docx`, `.xlsx`, `.md`, `.
 - Use charts to visualize data.
 
 ### `generate_word`
-- Generate Word documents from a structured dictionary schema validated with Pydantic models, ensuring type safety and schema compliance.
-- The dictionary includes metadata (title, subtitle, description, author, date), sections with headings, paragraphs (with bold/italic/alignment), lists (bullet/number), tables (with headers/rows/captions), images (downloaded by ID), and equations (LaTeX-rendered).
-- Use proper Heading styles (H1, H2, H3) for document hierarchy based on section levels.
-- Include a Table of Contents for documents with multiple sections.
-- Use consistent fonts (default Arial), spacing, and bullet points for readability.
-- Images are downloaded dynamically and inserted with captions; preserve correct association with content.
-- Equations are rendered using LaTeX syntax into Word's equation editor, preserving mathematical notation accurately.
-- Documents are generated entirely in memory for efficiency and security, without executing dynamic scripts.
+- Creates Word documents for academic papers, reports, or regular documents.
+- Supports formats like IEEE, set `page_break` to false and `columns_body` to 2 for this style.
+- For general reports, set `page_break` to true and `columns_body` to 1.
+- Never user markdown syntax for bold or italic text. Use the `bold` and `italic` fields instead.
+- For equations, use only LaTeX format. Never use Markdown format.
+- Includes elements like:
+  - **Headings**: Section titles with levels (1-6).
+  - **Paragraphs**: Plain text and alignment options.  
+  - **Words with Bold or Italic**: Words or phrases with bold and/or italic formatting. Do not use Markdown syntax like **bold** or *italic*, as it may not render correctly. Set the `bold` and `italic` fields to true or false as needed.
+  - **Separate paragraphs**: To create separate paragraphs within the text, use '\n\n' for paragraph breaks.
+  - **Lists**: Numbered or bulleted.
+  - **Tables**: With headers, rows, and captions.
+  - **Images**: With ID and captions.
+  - **Equations**: In LaTeX with captions.
 
 ### `generate_powerpoint`
 - Limit text per slide. Use bullet points and clear titles.

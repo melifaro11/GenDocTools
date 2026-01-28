@@ -10,7 +10,7 @@ It also includes tools for analyzing and reviewing existing documents.
 from json import dumps
 from os import getenv
 from datetime import datetime
-from typing import Annotated, Literal, List, Tuple
+from typing import Annotated, Literal, List, Tuple, Optional, Union, Any
 from enum import Enum
 from pathlib import Path
 from io import BytesIO
@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, force=True)
 logger = logging.getLogger("GenDocsServer")
 
 # Third-party libraries
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, field_validator, model_validator
 from requests import post, get
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.session import ServerSession
@@ -58,57 +58,83 @@ class ReviewComment(BaseModel):
 class ImagesList(BaseModel):
     images: str
 
-# Pydantic models for document schema validation
-class Metadata(BaseModel):
+# General Cover 
+class Cover(BaseModel):
     title: str
     subtitle: str
     description: str
     author: str
     month: str
     year: str
+    page_break: bool = False
 
-class Paragraph(BaseModel):
-    text: str
+# class Paragraph(BaseModel):
+#     text: str = ""
+#     bold: bool = False
+#     italic: bool = False
+#     alignment: str = "justify"
+
+class ListItem(BaseModel):
+    style: Literal['List Number', 'List Bullet'] = "List Bullet"  # e.g., "bullet" or "number"
+    items: List[str] = ["Item 1", "Item 2", "Item 3"]
+    # alignment: Optional[str] = None
+
+class Table(BaseModel):
+    headers: List[str] = ["Header 1", "Header 2", "Header 3"]
+    rows: List[List[str]] = [["Row 1 Col 1", "Row 1 Col 2", "Row 1 Col 3"]]
+    caption: Optional[str] = "Table 1 Caption"
+
+class Image(BaseModel):
+    id: str = None
+    # width: float = 4.0
+    # height: float = 3.0
+    # alignment: Optional[str] = None
+    caption: Optional[str] = "Fig. 1. Caption"
+
+    # @model_validator(mode='before')
+    # @classmethod
+    # def check_file_id(cls, data: Any) -> Any:
+    #     if isinstance(data, dict):
+    #         if 'file_id' in data and 'id' not in data:
+    #             data['id'] = data['file_id']
+    #     return data
+
+class Equation(BaseModel):
+    latex: str
+    caption: Optional[str] = "Equation 1 Caption"
+
+# class Section(BaseModel):
+#     title: str = ""
+#     level: Literal[1,2,3,4,5,6] = 2
+#     alignment: str = "center"
+#     columns: int = None
+#     paragraph: Paragraph
+#     list: ListItem = None
+#     table: Table = None
+#     image: Image = None
+#     equation: Equation = None
+
+class ParagraphHeader(BaseModel):
+    title: str = "Example Header"
+    level: Literal[1,2,3,4,5,6] = 2
+    alignment: str = "center"
+
+class ParagraphBody(BaseModel):
+    text: str = ""
+    # bold: bool = False
+    # italic: bool = False
+    alignment: str = "justify"
+
+class WordsWithBoldOrItalic(BaseModel):
+    text: str = ""
     bold: bool = False
     italic: bool = False
     alignment: str = "justify"
 
-class ListItem(BaseModel):
-    style: str  # e.g., "bullet" or "number"
-    items: List[str]
-    alignment: str = None
 
-class Table(BaseModel):
-    headers: List[str]
-    rows: List[List[str]]
-    caption: str = None
-
-class Image(BaseModel):
-    id: str
-    width: float = 6.0
-    height: float = 4.0
-    alignment: str = None
-    caption: str = None
-
-class Equation(BaseModel):
-    latex: str
-    caption: str = None
-
-class Section(BaseModel):
-    title: str
-    level: int = 2
-    alignment: str = None
-    columns: int = None
-    paragraphs: List[Paragraph] = None
-    lists: List[ListItem] = None
-    tables: List[Table] = None
-    images: List[Image] = None
-    equations: List[Equation] = None
-
-class DocumentDict(BaseModel):
-    font: str = "Arial"
-    metadata: Metadata
-    sections: List[Section]
+# class DocumentDict(BaseModel):
+#     font: str = "Times New Roman"
+#     section: Section
 
 # Initialize FastMCP server
 mcp = FastMCP(
@@ -170,18 +196,20 @@ async def generate_excel(
 # Mcp tool definitions
 @mcp.tool(
     name="generate_word",
-    title="Generate Word document from structured template dictionary",
-    description="Generate a Word document using a structured dictionary schema with metadata, sections, paragraphs, lists, tables, images, and equations. The schema is validated using Pydantic models.",
+    title="Generate Word document",
+    description="Generate a Word document from metadata and a list of document elements including headings, paragraphs, lists, tables, images, and equations.",
     annotations=ToolAnnotations(destructiveHint=False)
 )
 async def generate_word_from_dict(
     ctx: Context[ServerSession, None],
-    doc_dict: Annotated[DocumentDict, Field(description="Structured dictionary defining the document content, including metadata and sections with paragraphs, lists, tables, images, and equations.")],
+    doc_metadata: Annotated[Cover, Field(description="Document title, subtitle, description, author, and date.")],
+    columns_body: Annotated[int, Field(description="Number of columns for the body sections (1 or 2).")],
+    doc_dict: Annotated[List[Union[ParagraphHeader, ParagraphBody, WordsWithBoldOrItalic, ListItem, Table, Image, Equation]], Field(description="List of document elements for the body: headings (section titles), paragraphs (plain text; use '\\n\\n' for paragraph breaks), words (with bold/italic), lists (numbered or bulleted), tables (with headers and rows), images (with captions), equations (in LaTeX).")],
     file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])]):
     """
-    Generate a Word document from a validated structured dictionary.
+    Generate a Word document from metadata and a list of document elements.
     """
-    return _generate_word_from_template(doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+    return _generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
 
 # Mcp tool definitions
 @mcp.tool(

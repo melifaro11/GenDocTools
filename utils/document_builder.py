@@ -1,6 +1,7 @@
 from docx import Document
 from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_SECTION_START
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 import math2docx
@@ -8,6 +9,10 @@ import os
 import numpy as np
 from utils.download_file import download_file
 from utils.authorization import _get_bearer_token
+from utils.img_dimensions import img_dimensions
+import logging
+logging.basicConfig(level=logging.INFO, force=True)
+logger = logging.getLogger("GenFilesMCP")
 
 def vertical_center(metadata_dict: dict, doc: Document) -> int:
     # Constantes
@@ -56,153 +61,181 @@ def vertical_center(metadata_dict: dict, doc: Document) -> int:
     remaining_space = (useful_height - total_vertical_space_used) / 2
     empty_lines = np.ceil(remaining_space / (2 * DEFAULT_LINE_HEIGHT))  # Manteniendo la lógica original
 
-    return int(empty_lines) + 1
+    logger.info(f"DOCX: Vertical centering calculated.")
+
+    return int(empty_lines)
 
 def build_docx_from_dict(doc_dict, buffer, ctx, URL):
+    logger.info("DOCX: Starting document generation ...")
+
+    metadata_data = doc_dict.get("metadata", {})
+    sections_data = doc_dict.get("sections", [])
+    font = doc_dict.get("font", "Times New Roman")
+    columns_body = doc_dict.get("columns_body", 1)
+    columns_body = int(columns_body)
+    if columns_body > 2:
+        columns_body = 2  # Limitar a máximo 2 columnas
+    elif columns_body < 1:
+        columns_body = 1  # Mínimo 1 columna
+
     doc = Document()
 
-    empty_lines = vertical_center(doc_dict["metadata"], doc)
+    empty_lines = vertical_center(metadata_data, doc)
 
     # Parrafos para centrar verticalmente no están soportados en python-docx/DOCX
-    for _ in range(empty_lines):
-        doc.add_paragraph("")
+    if metadata_data.get("page_break", False):
+        for _ in range(empty_lines):
+            doc.add_paragraph("")
     
     # Aplicar metadata como portada centrada horizontalmente
-    if "metadata" in doc_dict:
-        meta = doc_dict["metadata"]
-        if "title" in meta:
-            title = doc.add_paragraph(meta["title"])
-            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    meta = metadata_data
+    if "title" in meta:
+        title = doc.add_paragraph(meta["title"])
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if title.runs:
             title.runs[0].bold = True
             title.runs[0].font.size = Inches(0.5)  # Tamaño grande para título
-            title.runs[0].font.name = doc_dict.get("font", "Arial")
-        if "subtitle" in meta:
-            subtitle = doc.add_paragraph(meta["subtitle"])
-            subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            title.runs[0].font.name = font  # Usar font global
+    if "subtitle" in meta:
+        subtitle = doc.add_paragraph(meta["subtitle"])
+        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if subtitle.runs:
             subtitle.runs[0].italic = True
             subtitle.runs[0].font.size = Inches(0.1667)  # Tamaño mediano para subtítulo
-            subtitle.runs[0].font.name = doc_dict.get("font", "Arial")
-        if "description" in meta:
-            desc = doc.add_paragraph(meta["description"])
-            desc.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            subtitle.runs[0].font.name = font
+    if "description" in meta:
+        desc = doc.add_paragraph(meta["description"])
+        desc.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if desc.runs:
             desc.runs[0].font.size = Inches(0.1667)  
-            desc.runs[0].font.name = doc_dict.get("font", "Arial")
-        if "author" in meta:
-            author = doc.add_paragraph(f"Autor: {meta['author']}")
-            author.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            desc.runs[0].font.name = font
+    if "author" in meta:
+        author = doc.add_paragraph(f"Autor: {meta['author']}")
+        author.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if author.runs:
             author.runs[0].font.size = Inches(0.1667)
-            author.runs[0].font.name = doc_dict.get("font", "Arial")
-        if "month" in meta and "year" in meta:
-            date = doc.add_paragraph(f"{meta['month']} {meta['year']}")
-            date.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            author.runs[0].font.name = font
+    if "month" in meta and "year" in meta:
+        date = doc.add_paragraph(f"{meta['month']} {meta['year']}")
+        date.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if date.runs:
             date.runs[0].font.size = Inches(0.1667)
-            date.runs[0].font.name = doc_dict.get("font", "Arial")
-        # Nota: La alineación vertical de página no está soportada en python-docx/DOCX
-        # Agregar salto de página después de la portada
+            date.runs[0].font.name = font
+    # Nota: La alineación vertical de página no está soportada en python-docx/DOCX
+    # Agregar salto de página después de la portada
+    if metadata_data.get("page_break", False):
         doc.add_page_break()
+    
+    # Aplicar columnas al body si columns_body > 1
+    if columns_body > 1:
+        new_section = doc.add_section(start_type=WD_SECTION_START.CONTINUOUS)
+        sectPr = new_section._sectPr
+        cols = OxmlElement('w:cols')
+        cols.set(qn('w:num'), str(columns_body))
+        sectPr.append(cols)
     
     # Contadores para numeración automática de captions
     figure_counter = 1
     table_counter = 1
     equation_counter = 1
     
-    # Procesar secciones
-    for section in doc_dict.get("sections", []):
-        # Agregar título de sección
-        heading = doc.add_heading(section["title"], level=section.get("level", 2))
-        if section.get("alignment") == "center":
-            heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        heading.runs[0].font.name = doc_dict.get("font", "Arial")
+    # Variable para acumular párrafos continuos
+    current_paragraph = None
+    
+    # Procesar elementos
+    for item in sections_data:
+        if "title" in item and "level" in item:  # ParagraphHeader
+            current_paragraph = None  # Reset paragraph
+            heading = doc.add_heading(item["title"], level=item.get("level", 2))
+            if item.get("alignment") == "center":
+                heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if heading.runs:
+                heading.runs[0].font.name = font
         
-        # Si la sección tiene columnas, agregar una nueva sección con columnas
-        if section.get("columns"):
-            new_section = doc.add_section()
-            sectPr = new_section._sectPr
-            cols = OxmlElement('w:cols')
-            cols.set(qn('w:num'), str(section["columns"]))
-            sectPr.append(cols)
-        
-        # Procesar párrafos
-        if section.get("paragraphs"):
-            for item in section["paragraphs"]:
-                p = doc.add_paragraph(item["text"])
-                if item.get("bold"):
-                    for run in p.runs:
-                        run.bold = True
-                if item.get("italic"):
-                    for run in p.runs:
-                        run.italic = True
-                for run in p.runs:
-                    run.font.size = Inches(12 / 72)
-                    run.font.name = doc_dict.get("font", "Arial")
+        elif "text" in item:  # ParagraphBody
+            if current_paragraph is None:
+                current_paragraph = doc.add_paragraph()
+                # Set alignment for the paragraph based on the first ParagraphBody
                 if item.get("alignment") == "center":
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    current_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 elif item.get("alignment") == "justify":
-                    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                    current_paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                # Default is left
+            # Add run to the current paragraph
+            run = current_paragraph.add_run(item["text"])
+            run.bold = item.get("bold", False)
+            run.italic = item.get("italic", False)
+            run.font.size = Inches(12 / 72)
+            run.font.name = font
         
-        # Procesar listas
-        if section.get("lists"):
-            for list_item in section["lists"]:
-                for item in list_item["items"]:
-                    p = doc.add_paragraph(item, style='List Bullet' if list_item.get("style") == "bullet" else 'List Number')
-                    p.runs[0].font.name = doc_dict.get("font", "Arial")
+        elif "items" in item:  # ListItem
+            current_paragraph = None  # Reset paragraph
+            for it in item["items"]:
+                p = doc.add_paragraph(it, style='List Bullet' if item.get("style") == "List Bullet" else 'List Number')
+                if p.runs:
+                    p.runs[0].font.name = font
         
-        # Procesar tablas
-        if section.get("tables"):
-            for item in section["tables"]:
-                # Validación básica
-                if not item.get("headers") or not item.get("rows"):
-                    raise ValueError("Tabla debe tener headers y rows.")
-                # Numeración automática si no hay caption personalizado
-                caption_text = item.get("caption", f"Tabla {table_counter}: ")
-                if not item.get("caption"):
-                    table_counter += 1
-                p = doc.add_paragraph(caption_text, style='Caption')
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                table = doc.add_table(rows=1, cols=len(item["headers"]))
-                table.style = 'Light List Accent 1'
-                hdr_cells = table.rows[0].cells
-                for i, hdr in enumerate(item["headers"]):
-                    hdr_cells[i].text = hdr
-                    for run in hdr_cells[i].paragraphs[0].runs:
-                        run.font.name = doc_dict.get("font", "Arial")
-                for row_data in item["rows"]:
-                    row_cells = table.add_row().cells
-                    for i, cell_data in enumerate(row_data):
-                        row_cells[i].text = cell_data
-                        for run in row_cells[i].paragraphs[0].runs:
-                            run.font.name = doc_dict.get("font", "Arial")
+        elif "headers" in item:  # Table
+            current_paragraph = None  # Reset paragraph
+            if not item.get("headers") or not item.get("rows"):
+                raise ValueError("Table must have headers and rows.")
+            caption_text = item.get("caption", f"Table {table_counter}: ")
+            if not item.get("caption"):
+                table_counter += 1
+            p = doc.add_paragraph(caption_text, style='Caption')
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            table = doc.add_table(rows=1, cols=len(item["headers"]))
+            table.style = 'Light List Accent 1'
+            hdr_cells = table.rows[0].cells
+            for i, hdr in enumerate(item["headers"]):
+                hdr_cells[i].text = hdr
+                for run in hdr_cells[i].paragraphs[0].runs:
+                    run.font.name = font
+            for row_data in item["rows"]:
+                row_cells = table.add_row().cells
+                for i, cell_data in enumerate(row_data):
+                    row_cells[i].text = cell_data
+                    for run in row_cells[i].paragraphs[0].runs:
+                        run.font.name = font
         
-        # Procesar imágenes
-        if section.get("images"):
-            for item in section["images"]:
-                # Descargar imagen
+        elif "id" in item:  # Image
+            current_paragraph = None  # Reset paragraph
+            try:
                 bearer_token = _get_bearer_token(ctx)
                 image_file = download_file(URL, bearer_token, item["id"])
                 if isinstance(image_file, dict) and "error" in image_file:
                     raise ValueError(f"Error downloading image with ID {item['id']}: {image_file['error']['message']}")
-                doc.add_picture(image_file, width=Inches(item.get("width", 6.0)), height=Inches(item.get("height", 4.0)))
-                # Numeración automática si no hay caption personalizado
-                caption_text = item.get("caption", f"Figura {figure_counter}: ")
-                if not item.get("caption"):
-                    figure_counter += 1
-                p = doc.add_paragraph(caption_text, style='Caption')
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                if not image_file or (hasattr(image_file, 'getbuffer') and len(image_file.getbuffer()) == 0):
+                    raise ValueError(f"Downloaded image with ID {item['id']} is empty or invalid.")
+                img_width, img_height = img_dimensions(image_file, body_columns=columns_body)
+                doc.add_picture(image_file, width=Inches(img_width), height=Inches(img_height))
+                last_paragraph = doc.paragraphs[-1] 
+                last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            except Exception as e:
+                logger.warning(f"Failed to load image {item['id']}: {e}. Adding placeholder.")
+                doc.add_paragraph(f"[Image Placeholder: {item.get('caption', 'No caption')}]", style='Caption')
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            caption_text = item.get("caption", f"Figure {figure_counter}: ")
+            if not item.get("caption"):
+                figure_counter += 1
+            p = doc.add_paragraph(caption_text, style='Caption')
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # Procesar ecuaciones
-        if section.get("equations"):
-            for eq in section["equations"]:
-                p = doc.add_paragraph()
-                math2docx.add_math(p, eq["latex"])
-                if eq.get("caption"):
-                    caption_text = eq.get("caption", f"Ecuación {equation_counter}: ")
-                    if not eq.get("caption"):
-                        equation_counter += 1
-                    p_cap = doc.add_paragraph(caption_text, style='Caption')
-                    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    
+        elif "latex" in item:  # Equation
+            current_paragraph = None  # Reset paragraph
+            p = doc.add_paragraph()
+            math2docx.add_math(p, item["latex"])
+            if item.get("caption"):
+                caption_text = item.get("caption", f"Equation {equation_counter}: ")
+                if not item.get("caption"):
+                    equation_counter += 1
+                p_cap = doc.add_paragraph(caption_text, style='Caption')
+                p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        else:
+            current_paragraph = None  # Reset for any other item
 
-
+    logger.info("DOCX: Document generation completed!")
     doc.save(buffer)
     buffer.seek(0)
     return buffer

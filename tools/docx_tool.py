@@ -159,10 +159,11 @@ def generate_word(python_script, file_name, images_list, ctx, URL, ENABLE_CREATE
         return response 
     
     except Exception as e:
+        error_message = str(e) if str(e) else "An unknown error occurred during document generation."
         return dumps(
             {
                 "error": {
-                    "message": str(e)
+                    "message": error_message
                 }
             }, 
             indent=4, 
@@ -245,16 +246,25 @@ def review_docx(file_id, file_name, review_comments, ctx, URL, ENABLE_CREATE_KNO
     except Exception as e:
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)
 
-def generate_word_from_template(doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
+def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
     """
-    Generate a Word document from a validated structured dictionary.
+    Generate a Word document from metadata and a list of sections.
 
     Returns:
         dict: Contains 'file_path_download' with a markdown hyperlink for downloading the generated Word file.
     """
     try:
-        # Convert Pydantic model to dict
-        doc_data = doc_dict.model_dump()
+        # Convert Pydantic models to dicts
+        metadata_data = doc_metadata.model_dump()
+        sections_data = [section.model_dump() for section in doc_dict]
+        
+        # Create full doc dict
+        doc_full = {
+            "metadata": metadata_data,
+            "sections": sections_data,
+            "font": "Times New Roman",  # Default font
+            "columns_body": columns_body
+        }
         
         # Create buffer
         buffer = BytesIO()
@@ -262,7 +272,7 @@ def generate_word_from_template(doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNO
         
         # Build the document
         from utils.document_builder import build_docx_from_dict
-        buffer = build_docx_from_dict(doc_data, buffer, ctx, URL)
+        buffer = build_docx_from_dict(doc_full, buffer, ctx, URL)
         
         # Upload the file
         bearer_token = _get_bearer_token(ctx)

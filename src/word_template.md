@@ -1,6 +1,8 @@
-Generates a Word document for reports or academic papers, including headers, paragraphs, lists, tables, images, equations, and bold/italic text formatting.
+Generates a Word document for reports or academic papers.
 
-The arguments `document_cover`, `columns_body`, `document_body_elements` and `file_name` are mandatory and have to be valid dictionaries. If any of these are missing or are not valid dictionaries, the function will raise a `ValueError`. 
+This tool requires specifying the file name and the cover page information, such as title, subtitle, description, and author. Additionally, the document layout must be defined as either single-column for general reports or double-column for academic papers.
+
+The document content is constructed by adding elements in sequence. Available elements include section headings for structure and paragraphs for text. Use the dedicated list element for bulleted or numbered lists, the equation element for mathematical formulas, and the specific formatting element for bold or italic text. Do not use Markdown syntax, and avoid attempting to format lists, equations, or styled text manually within paragraphs, as these will not render correctly. Tables and images are also supported as individual elements.
 
 # Arguments
 
@@ -18,37 +20,43 @@ The arguments `document_cover`, `columns_body`, `document_body_elements` and `fi
 - **columns_body**: int - Number of columns for the body sections (1 or 2). 1 is for general reports, 2 is for papers following academic formats.
 
 - **document_body_elements**: A list of document elements, the order of elements defines their sequence in the document. Supported elements include:
+  - **type**: "ParagraphHeader", "ParagraphBody", "ParagraphListItem", "Table", "Image", "Equation" or "WordsWithBoldOrItalic"
 
-  - **ParagraphHeader**: Use this element to create a heading.
-    - paragraph_title: str - The heading text.
-    - level: int (1-6) - The heading level (1 for main title, 2 for section, etc.).
+    - **ParagraphHeader type**: Use this element to create a heading.
+      - type: "ParagraphHeader"
+      - text: str - The heading text.
+      - level: int (1-6) - The heading level (1 for main title, 2 for section, etc.).
 
-  - **ParagraphBody**: Use this element to create a paragraph of text.
-    - paragraph_text: str - The paragraph text. Use '\n\n' for paragraph breaks.
-    - **Never user markdown formatting only plain text**.
-    - **Never use bold or italic formatting in this element, use WordsWithBoldOrItalic instead**.
+    - **ParagraphBody type**: Use this element to create a paragraph of text.
+      - type: "ParagraphBody"
+      - text: str - The paragraph text. Use '\n\n' for paragraph breaks.
+      - **Never use markdown formatting only plain text**.
+      - **Never use bold or italic formatting in this element, use WordsWithBoldOrItalic instead**.
 
-  - **WordsWithBoldOrItalic**: Use this element to add words or phrases with bold or italic formatting within a paragraph.
-    - **Never user markdown formatting only plain text**.
-    - bold_italic_text: str - The text content.
-    - bold: bool - Whether the text is bold.
-    - italic: bool - Whether the text is italic.
+    - **WordsWithBoldOrItalic type**: Use this element to add words or phrases with bold or italic formatting within a paragraph.
+      - type: "WordsWithBoldOrItalic"
+      - text: str - The text content.
+      - bold: bool - Whether the text is bold.
+      - italic: bool - Whether the text is italic.
+      - **Never use markdown formatting only plain text**.
 
-  - **ListItem**: Use this element to create a list (bulleted or numbered).
-    - list_style: str - "List Number" for numbered list or "List Bullet" for bulleted list.
-    - items: List[str] - The list of item texts.
+    - **ParagraphListItem type**: Use this element to create a list (bulleted or numbered).
+      - type: "ParagraphListItem"
+      - list_style: str - "List Number" for numbered list or "List Bullet" for bulleted list.
+      - items: List[str] - The list of item texts.
 
-  - **Table**: Use this element to create a table.
-    - headers: List[str] - The table headers.
-    - rows: List[List[str]] - The table rows, each as a list of cell values.
-    - caption: Optional[str] - An optional caption for the table.
+    - **Table type**: Use this element to create a table.
+      - type: "Table"
+      - headers: List[str] - The table headers.
+      - rows: List[List[str]] - The table rows, each as a list of cell values.
+      - caption: Optional[str] - An optional caption for the table.
 
-  - **Image**: Use this element to insert an image.
-    - id: str - The image file ID (preloaded by the server).
-    - caption: Optional[str] - An optional caption for the image.
+    - **Image type**: Use this element to insert an image.
+      - type: "Image"
+      - id: str - The image file ID (preloaded by the server).
+      - caption: Optional[str] - An optional caption for the image.
 
-  - **Equation**: Use this element to insert a mathematical equation. 
-    - latex: str - The LaTeX code for the equation.
-    - caption: Optional[str] - An optional caption for the equation.
-
-Never use markdown syntax for bold or italic text formatting, use the respective keys to set bold or italic text. Never include equations in paragraphs, use the respective keys to set equations. Never list items in paragraphs, use the respective keys to set list items.
+    - **Equation type**: Use this element to insert a mathematical equation. 
+      - type: "Equation"
+      - latex: str - The LaTeX code for the equation.
+      - caption: Optional[str] - An optional caption for the equation.

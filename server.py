@@ -1,56 +1,75 @@
 """
-Main module for the GenFilesMCP server.
+Main module for the GenFilesMCP server converted to FastAPI.
 
-This module initializes the FastMCP server and defines tools for generating
+This module initializes the FastAPI server and defines endpoints for generating
 Excel, Word, PowerPoint, and Markdown files using AI-generated Python scripts.
-It also includes tools for analyzing and reviewing existing documents.
+It also includes endpoints for analyzing and reviewing existing documents.
 """
 
 # Native libraries
-from json import dumps
 from os import getenv
-from datetime import datetime
-from typing import Annotated, Literal, List, Tuple, Union, Any
-from enum import Enum
-from pathlib import Path
-from io import BytesIO
+from typing import Annotated, Literal, List, Tuple, Union, Any, Optional
 import logging
-logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("GenDocsServer")
 
 # Third-party libraries
+from fastapi import FastAPI, HTTPException, Request, Depends, Body, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import Field, BaseModel, field_validator, model_validator
-from requests import post, get
-from mcp.server.fastmcp import FastMCP, Context
-from mcp.server.session import ServerSession
-from mcp.types import ToolAnnotations
-from docx import Document
+import uvicorn
 
 # Utilities
 from utils.load_md_templates import load_md_templates
-from utils.upload_file import upload_file
-from utils.download_file import download_file
-from utils.knowledge import create_knowledge
 from utils.argument_descriptions import ARGUMENT_DESCRIPTIONS
 
 # Import tools from the tools directory
 from tools.powerpoint_tool import generate_powerpoint as _generate_powerpoint
 from tools.excel_tool import generate_excel as _generate_excel
-from tools.docx_tool import generate_word as _generate_word
 from tools.markdown_tool import generate_markdown as _generate_markdown
 from tools.docx_tool import full_context_docx as _full_context_docx, review_docx as _review_docx, generate_word_from_template as _generate_word_from_template
 
-# Parameters
-URL = getenv('OWUI_URL', '')
-PORT = int(getenv('PORT', '8000'))
-# Control transport: if HTTP_TRANSPORT is 'true' (default) use 'streamable-http', else use 'stdio'
-HTTP_TRANSPORT = getenv('HTTP_TRANSPORT', 'true').lower() == 'true'
-POWERPOINT_TEMPLATE, EXCEL_TEMPLATE, WORD_TEMPLATE, MARKDOWN_TEMPLATE, MCP_INSTRUCTIONS = load_md_templates()
-# Enable or disable automatic creation of knowledge collections after upload
-# Defaults to true to preserve existing behavior. Set to 'false' to disable.
-ENABLE_CREATE_KNOWLEDGE = getenv('ENABLE_CREATE_KNOWLEDGE', 'true').lower() == 'true' 
+# Configure Logging
+logging.basicConfig(level=logging.INFO, force=True)
+logger = logging.getLogger("GenFilesOpenAPI Tool Servers")
 
-# Pydantic model for review comments
+# Parameters
+OWUI_URL = getenv('OWUI_URL', 'http://localhost:8080')
+PORT = int(getenv('PORT', '8000'))
+POWERPOINT_TEMPLATE, EXCEL_TEMPLATE, WORD_TEMPLATE, MARKDOWN_TEMPLATE, MCP_INSTRUCTIONS = load_md_templates()
+ENABLE_CREATE_KNOWLEDGE = getenv('ENABLE_CREATE_KNOWLEDGE', 'true').lower() == 'true'
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="GenFiles OpenAPI Tool Server",
+    version="0.3.0-alpha.4",
+    description=MCP_INSTRUCTIONS,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Mock Context for Compatibility ---
+class MockRequest:
+    def __init__(self, headers):
+        self.headers = headers
+
+class MockRequestContext:
+    def __init__(self, request):
+        self.request = request
+
+class MockContext:
+    def __init__(self, headers):
+        self.request_context = MockRequestContext(MockRequest(headers))
+
+def get_context(request: Request) -> MockContext:
+    return MockContext(request.headers)
+
+# --- Pydantic Models for Data Structures ---
+
 class ReviewComment(BaseModel):
     index: int
     comment: str
@@ -58,218 +77,189 @@ class ReviewComment(BaseModel):
 class ImagesList(BaseModel):
     images: str
 
-# General Cover 
 class Cover(BaseModel):
-    title: str = "Document Title"
-    subtitle: str = ""
-    description: str = "Document Description"
-    author: str = "Author Name"
-    month: str = "January"
-    year: str = "2024"
-    page_break: bool = False
+    title: str = Field("Document Title", description="The main title of the document.")
+    subtitle: str = Field("", description="The subtitle of the document.")
+    description: str = Field("Document Description", description="A brief description of the document.")
+    author: str = Field("Author Name", description="The author's name.")
+    month: str = Field("January", description="The month of publication (e.g., 'January').")
+    year: str = Field("2024", description="The year of publication (e.g., '2024').")
+    page_break: bool = Field(False, description="Whether to add a page break after the cover.")
 
-# class Paragraph(BaseModel):
-#     text: str = ""
-#     bold: bool = False
-#     italic: bool = False
-#     alignment: str = "justify"
-
-class ListItem(BaseModel):
-    list_style: Literal['List Number', 'List Bullet'] = "List Bullet"  # e.g., "bullet" or "number"
-    items: List[str] = ["Item 1", "Item 2", "Item 3"]
-    # alignment: Optional[str] = None
+class ParagraphListItem(BaseModel):
+    type: Literal["ParagraphListItem"] = Field("ParagraphListItem", description="Discriminator for the list item element.")
+    list_style: Literal['List Number', 'List Bullet'] = Field("List Bullet", description="The style of the list: 'List Number' or 'List Bullet'.")
+    items: List[str] = Field(["Item 1", "Item 2", "Item 3"], description="A list of text items.")
 
 class Table(BaseModel):
-    headers: List[str] = ["Header 1", "Header 2", "Header 3"]
-    rows: List[List[str]] = [["Row 1 Col 1", "Row 1 Col 2", "Row 1 Col 3"]]
-    caption: str = "Table 1 Caption"
+    type: Literal["Table"] = Field("Table", description="Discriminator for the table element.")
+    headers: List[str] = Field(["Header 1", "Header 2", "Header 3"], description="List of table headers.")
+    rows: List[List[str]] = Field([["Row 1 Col 1", "Row 1 Col 2", "Row 1 Col 3"]], description="List of rows, where each row is a list of cell values.")
+    caption: str = Field("Table 1 Caption", description="Caption for the table.")
 
 class Image(BaseModel):
-    id: str = None
-    # width: float = 4.0
-    # height: float = 3.0
-    # alignment: Optional[str] = None
-    caption: str = "Fig. 1. Caption"
-
-    # @model_validator(mode='before')
-    # @classmethod
-    # def check_file_id(cls, data: Any) -> Any:
-    #     if isinstance(data, dict):
-    #         if 'file_id' in data and 'id' not in data:
-    #             data['id'] = data['file_id']
-    #     return data
+    type: Literal["Image"] = Field("Image", description="Discriminator for the image element.")
+    id: Optional[str] = Field(None, description="The image file ID.")
+    caption: str = Field("Fig. 1. Caption", description="Caption for the image.")
 
 class Equation(BaseModel):
-    latex: str
-    caption: str = "Equation 1 Caption"
+    type: Literal["Equation"] = Field("Equation", description="Discriminator for the equation element.")
+    latex: str = Field(..., description="The LaTeX code for the equation.")
+    caption: str = Field("Equation 1 Caption", description="Caption for the equation.")
 
 class ParagraphHeader(BaseModel):
-    paragraph_title: str
-    level: Literal[1,2,3,4,5,6] = 2
-    # alignment: str = "center"
+    type: Literal["ParagraphHeader"] = Field("ParagraphHeader", description="Discriminator for the header element.")
+    text: str = Field(..., description="The content of the heading.")
+    level: Literal[1,2,3,4,5,6] = Field(2, description="The heading level (1-6).")
 
 class ParagraphBody(BaseModel):
-    paragraph_text: str = ""
-    # bold: bool = False
-    # italic: bool = False
-    # alignment: str = "justify"
+    type: Literal["ParagraphBody"] = Field("ParagraphBody", description="Discriminator for the paragraph element.")
+    text: str = Field("", description="The text content of the paragraph. Do NOT use Markdown.")
 
 class WordsWithBoldOrItalic(BaseModel):
-    bold_italic_text: str = ""
-    bold: bool = False
-    italic: bool = False
-    # alignment: str = "justify"
+    type: Literal["WordsWithBoldOrItalic"] = Field("WordsWithBoldOrItalic", description="Discriminator for bold/italic text element.")
+    text: str = Field("", description="The text to format.")
+    bold: bool = Field(False, description="Whether to apply bold formatting.")
+    italic: bool = Field(False, description="Whether to apply italic formatting.")
 
-# class DocumentDict(BaseModel):
-#     font: str = "Times New Roman"
-#     section: Section
+# --- Request Models for Endpoints ---
 
-# Initialize FastMCP server
-mcp = FastMCP(
-    name = "GenDocsServer",
-    instructions = MCP_INSTRUCTIONS,
-    port = PORT,
-    host = "0.0.0.0"
-)
+class DocxElement(BaseModel):
+    type: Literal["ParagraphHeader", "ParagraphBody", "ParagraphListItem", "Table", "Image", "Equation", "WordsWithBoldOrItalic"] = Field(..., description="The type of the element.")
+    
+    # Header/Body/Bold fields
+    text: Optional[str] = Field(None, description="Required for ParagraphHeader type, ParagraphBody type, WordsWithBoldOrItalic type.")
+    level: Optional[int] = Field(None, description="Required for ParagraphHeader type (1-6).")
+    
+    # Body/Bold fields
+    bold: Optional[bool] = Field(None, description="Optional for WordsWithBoldOrItalic type.")
+    italic: Optional[bool] = Field(None, description="Optional for WordsWithBoldOrItalic type.")
+    
+    # List fields
+    list_style: Optional[Literal["List Number", "List Bullet"]] = Field(None, description="Required for ParagraphListItem type ('List Number' or 'List Bullet').")
+    items: Optional[List[str]] = Field(None, description="Required for ParagraphListItem type.")
+    
+    # Table fields
+    headers: Optional[List[str]] = Field(None, description="Required for Table type.")
+    rows: Optional[List[List[str]]] = Field(None, description="Required for Table type.")
+    
+    # Image/Equation/Table common
+    caption: Optional[str] = Field(None, description="Optional for Table type, Image type, Equation type.")
+    
+    # Image fields
+    id: Optional[str] = Field(None, description="Required for Image type.")
+    
+    # Equation fields
+    latex: Optional[str] = Field(None, description="Required for Equation type.")
 
-# Mcp tool definitions
-@mcp.tool(
-    name="generate_powerpoint",
-    title="Generate PowerPoint presentation",
+    @model_validator(mode='after')
+    def validate_type_fields(self) -> 'DocxElement':
+        if self.type == "ParagraphHeader":
+            if not self.text: raise ValueError("text is required for ParagraphHeader type")
+            if not self.level: raise ValueError("level is required for ParagraphHeader type")
+        elif self.type == "ParagraphBody":
+            if self.text is None: raise ValueError("text is required for ParagraphBody type")
+        elif self.type == "ParagraphListItem":
+            if not self.items: raise ValueError("items is required for ParagraphListItem type")
+        elif self.type == "Table":
+            if not self.headers: raise ValueError("headers is required for Table type")
+            if not self.rows: raise ValueError("rows is required for Table type")
+        elif self.type == "Image":
+            if not self.id: raise ValueError("id is required for Image type")
+        elif self.type == "Equation":
+            if not self.latex: raise ValueError("latex is required for Equation type")
+        elif self.type == "WordsWithBoldOrItalic":
+            if self.text is None: raise ValueError("text is required for WordsWithBoldOrItalic type")
+        return self
+
+class GeneratePowerPointRequest(BaseModel):
+    python_script: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])
+    file_name: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])
+
+class GenerateExcelRequest(BaseModel):
+    python_script: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])
+    file_name: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])
+
+class GenerateMarkdownRequest(BaseModel):
+    python_script: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])
+    file_name: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])
+
+class DocxBodyElements(BaseModel):
+    document_cover: Cover = Field(description="This argument defines the cover page of the document. Set page_break to True for generating general reports and False for academic papers. Backend is able to center the cover page content automatically so no need to add extra spaces or new lines.")
+    columns_body: int = Field(description="This argument defines the number of columns in the document body. Set to 1 for single column or 2 for double column layout for academic papers.")
+    document_body_elements: List[DocxElement] = Field(description="This argument defines the body elements of the document. The order of elements in the list defines the order in the document body.")
+    file_name: str = Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])
+
+class FullContextDocxRequest(BaseModel):
+    file_id: str = Field(description=ARGUMENT_DESCRIPTIONS["full_context_docx"]["file_id"])
+    file_name: str = Field(description=ARGUMENT_DESCRIPTIONS["full_context_docx"]["file_name"])
+
+class ReviewDocxRequest(BaseModel):
+    file_id: str = Field(description=ARGUMENT_DESCRIPTIONS["review_docx"]["file_id"])
+    review_comments: List[ReviewComment] = Field(description=ARGUMENT_DESCRIPTIONS["review_docx"]["review_comments"])
+    file_name: str = Field(description=ARGUMENT_DESCRIPTIONS["review_docx"]["file_name"])
+
+
+# --- Endpoints ---
+
+@app.post(
+    "/generate_powerpoint", 
+    summary="Generate PowerPoint", 
     description=POWERPOINT_TEMPLATE,
-    annotations=ToolAnnotations(destructiveHint=False)
+    operation_id="generate_powerpoint_presentation"
 )
-async def generate_powerpoint(
-    ctx: Context[ServerSession, None],
-    python_script: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])]):
-    """
-    Generate a PowerPoint presentation using the provided AI-generated Python script.
-    """
-    return _generate_powerpoint(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+def generate_powerpoint(request: Request, body: GeneratePowerPointRequest):
+    ctx = get_context(request)
+    return _generate_powerpoint(body.python_script, body.file_name, ctx, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
 
-# Mcp tool definitions
-@mcp.tool(
-    name="generate_excel",
-    title="Generate Excel workbook",
+@app.post(
+    "/generate_excel", 
+    summary="Generate Excel", 
     description=EXCEL_TEMPLATE,
-    annotations=ToolAnnotations(destructiveHint=False)
+    operation_id="generate_excel_workbook"
 )
-async def generate_excel(
-    ctx: Context[ServerSession, None],
-    python_script: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])]):
-    """
-    Generate an Excel workbook using the provided AI-generated Python script.
-    """
-    return _generate_excel(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+def generate_excel(request: Request, body: GenerateExcelRequest):
+    ctx = get_context(request)
+    return _generate_excel(body.python_script, body.file_name, ctx, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
 
-# Mcp tool definitions
-# @mcp.tool(
-#     name="generate_word",
-#     title="Generate Word document",
-#     description=WORD_TEMPLATE, 
-#     annotations=ToolAnnotations(destructiveHint=False)
-# )
-# async def generate_word(
-#     ctx: Context[ServerSession, None],
-#     python_script: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])],
-#     file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])],
-#     images_list: Annotated[List[str], Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["images_list"])] = []):
-#     """
-#     Generate a Word document using the provided AI-generated Python script. The images_list argument provides a list of image file IDs to be included in the document.
-#     """
-#     return _generate_word(python_script, file_name, images_list, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
-
-# Mcp tool definitions
-@mcp.tool(
-    name="generate_word",
-    title="Generate Word document",
-    description=WORD_TEMPLATE,
-    annotations=ToolAnnotations(destructiveHint=False)
-)
-async def generate_word_from_dict(
-    ctx: Context[ServerSession, None],
-    document_cover: Annotated[Cover, Field(description="This argument defines the cover page of the document. Document cover set page_break to True for generating general reports and False for academic papers.")],
-    columns_body: Annotated[int, Field(description="This argument defines the number of columns in the document body. Set to 1 for single column or 2 for double column layout for academic papers.")],
-    document_body_elements: Annotated[
-        List[
-            Union[
-                ParagraphHeader, 
-                ParagraphBody, 
-                WordsWithBoldOrItalic, 
-                ListItem, 
-                Table, 
-                Image, 
-                Equation
-            ]
-        ], 
-        Field(
-            description="This argument defines the body elements of the document. The order of elements in the list defines the order in the document body."
-            )
-    ],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])]):
-    """
-    Generate a Word document from metadata and a list of document elements.
-    """
-    return _generate_word_from_template(document_cover, columns_body, document_body_elements, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
-
-# Mcp tool definitions
-@mcp.tool(
-    name="generate_markdown",
-    title="Generate Markdown document",
+@app.post(
+    "/generate_markdown", 
+    summary="Generate Markdown", 
     description=MARKDOWN_TEMPLATE,
-    annotations=ToolAnnotations(destructiveHint=False)
+    operation_id="generate_markdown_document"
 )
-async def generate_markdown(
-    ctx: Context[ServerSession, None],
-    python_script: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["python_script"])],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["common_args"]["file_name"])]) :
-    """
-    Generate a Markdown document using the provided AI-generated Python script.
-    """
-    # keep same behaviour: pass ctx (the tool will obtain user_id from token)
-    return _generate_markdown(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+def generate_markdown(request: Request, body: GenerateMarkdownRequest):
+    ctx = get_context(request)
+    return _generate_markdown(body.python_script, body.file_name, ctx, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
 
-# Mcp tool definitions
-@mcp.tool(
-    name="full_context_docx",
-    title="Return the structure of a docx document",
-    description="""Return the index, style and text of each element in a docx document. This includes paragraphs, headings, tables, images, and other components. The output is a JSON object that provides a detailed representation of the document's structure and content."""
+@app.post(
+    "/generate_word", 
+    summary="Generate Word", 
+    description=WORD_TEMPLATE,
+    operation_id="generate_word_document"
 )
-async def full_context_docx(
-    ctx: Context[ServerSession, None],
-    file_id: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["full_context_docx"]["file_id"])],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["full_context_docx"]["file_name"])]):
-    """
-    Return the full structure and content of a DOCX document as JSON.
-    """
-    return _full_context_docx(file_id, file_name, ctx, URL)
+def generate_word(request: Request, body: DocxBodyElements):
+    ctx = get_context(request)
+    return _generate_word_from_template(body.document_cover, body.columns_body, body.document_body_elements, body.file_name, ctx, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
 
-# Mcp tool definitions
-@mcp.tool(
-    name="review_docx",
-    title="Review and comment on docx document",
-    description="""Review an existing docx document, perform corrections (spelling, grammar, style suggestions, idea enhancements), and add comments to cells. Returns a markdown hyperlink for downloading the reviewed file."""
+@app.post(
+    "/list_docx_elements", 
+    summary="Return the structure of a docx document",
+    operation_id="list_docx_elements"
 )
-async def review_docx(
-    ctx: Context[ServerSession, None],
-    file_id: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["review_docx"]["file_id"])],
-    review_comments: Annotated[List[ReviewComment], Field(description=ARGUMENT_DESCRIPTIONS["review_docx"]["review_comments"])],
-    file_name: Annotated[str, Field(description=ARGUMENT_DESCRIPTIONS["review_docx"]["file_name"])]):
-    """
-    Review a DOCX document and add comments based on the provided review comments.
-    """
-    return _review_docx(file_id, file_name, review_comments, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
+def full_context_docx(request: Request, body: FullContextDocxRequest):
+    ctx = get_context(request)
+    return _full_context_docx(body.file_id, body.file_name, ctx, OWUI_URL)
 
-# Initialize and run the server
-def main():
-    chosen_transport = "streamable-http" if HTTP_TRANSPORT else "stdio"
-    logger.info(f"Starting MCP with transport={chosen_transport}")
-    mcp.run(
-        transport=chosen_transport
-    )
+@app.post(
+    "/review_docx", 
+    summary="Review and comment on docx document",
+    operation_id="review_docx_document"
+)
+def review_docx(request: Request, body: ReviewDocxRequest):
+    ctx = get_context(request)
+    return _review_docx(body.file_id, body.file_name, body.review_comments, ctx, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
 
-# Entry point
+
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

@@ -43,5 +43,8 @@ RUN groupadd -r app \
 ENV HOME=/home/app
 USER app
 
-# Set the default command to run the server using UV (runs as non-root user `app`)
+# Expose the API port
+EXPOSE 8000
+
+# Set the default command to run the server script (which respects the PORT env var)
 CMD ["uv", "run", "server.py"]

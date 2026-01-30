@@ -1,6 +1,6 @@
-# GenFilesMCP 🧩
+# GenFiles OpenAPI Tool Server 🧩
 
-GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This MCP executes Python templates to produce files, uploads them to an Open Web UI (OWUI) endpoint, and stores them in the user's personal knowledge base. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
+GenFiles is an OpenAPI Tool Server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This server executes Python templates to produce files, uploads them to an Open Web UI (OWUI) endpoint, and stores them in the user's personal knowledge base. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
 
 ## Table of Contents
 
@@ -26,7 +26,7 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 ## Features
 
 - **File Generation**: Creates files in multiple formats (PowerPoint, Excel, Word, Markdown) from user requests.
-- **FastMCP Server**: Receives and processes generation requests via a FastMCP server.
+- **OpenAPI Tool Server**: Exposes endpoints via standard OpenAPI specification for seamless integration with LLMs.
 - **Python Templates**: Uses customizable Python templates to generate files with specific structures.
 - **OWUI Integration**: Automatically uploads generated files to Open Web UI's file API (`/api/v1/files/`) and (`/api/v1/knowledge/`).
 - **Document Review**: Analyzes existing Word documents and adds structured comments for corrections, grammar suggestions, or idea enhancements.
@@ -35,11 +35,9 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 
 ## Status
 
-This release is **v0.3.0-alpha.3**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG. **Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
+This release is **v0.3.0-alpha.4**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG. **Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
 
 The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated or reviewed files are automatically added to users' knowledge collections. The original behavior (downloading files from chats) remains unchanged for end users.
-
-> **Note:** If you encounter any errors, please create an issue so we can review it. In the meantime, you can set `ENABLE_CREATE_KNOWLEDGE=false`; this will not affect the file generation or review capabilities.
 
 ## Prerequisites
 
@@ -54,7 +52,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 Pull the pre-built Docker image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.3
+docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.4
 ```
 
 Run the container:
@@ -65,7 +63,7 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e PORT=YOUR_PORT \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.3
+  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.4
 ```
 
 Alternatively, use the `:latest` tag for the most recent version:
@@ -155,36 +153,6 @@ Finally, run the Docker Compose setup:
 docker compose up -d
 ```
 
-### Using GenFilesMCP with MCPO in STDIO Mode
-
-**Note:** This alpha is not compatible with MCPO. Compatibility depends on approval of https://github.com/open-webui/mcpo/pull/273 which would enable passing per-session bearer tokens via headers to MCPO.
-
-To use the GenFilesMCP server in `stdio` mode with MCPO, you need to add it to the `config.json` file. Below is an example configuration:
-
-```json
-{
-  "mcpServers": {
-    "GenFilesMCP": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/Baronco/GenFilesMCP.git@dev",
-        "genfilesmcp"
-      ],
-      "env": {
-        "OWUI_URL": "http://host.docker.internal:3000",
-        "PORT": "8015",
-        "ENABLE_CREATE_KNOWLEDGE": "false",
-        "HTTP_TRANSPORT": "true"
-      }
-    }
-  }
-}
-```
-
-- Replace the `env` values with the appropriate settings for your environment.
-- For more information about MCPO, refer to the [MCPO repository](https://github.com/open-webui/mcpo).
-
 ## Configuration
 
 ### Environment Variables
@@ -198,17 +166,17 @@ The MCP server requires the following environment variables:
 | `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are automatically added to users' knowledge collections. Set to `true` to enable automatic creation/updating of knowledge collections; set to `false` to disable that behavior and preserve RAG workflows (recommended default for RAG users). NOTE: If `ENABLE_CREATE_KNOWLEDGE=true`, it is mandatory to enable the Open Web UI document option `Bypass Embedding and Retrieval`. | `false` |
 | `HTTP_TRANSPORT` | Determines the transport mode for the MCP server. Set to `true` for `streamable-http` (default) or `false` for `stdio`. | `true` |
 
-### MCP Configuration in Open Web UI
+### Tool Configuration in Open Web UI
 
-**Important:** This alpha release requires **Open Web UI version v0.6.42 or later** for native MCP support due to a change in the knowledge API (now `/api/v1/knowledge/search`, paginated). For Open Web UI versions older than v0.6.42, use GenFilesMCP releases **<= 0.2.2**. This alpha is not compatible with MCPO; compatibility depends on approval of https://github.com/open-webui/mcpo/pull/273 (which would allow passing per-session bearer tokens via headers to MCPO). MCPO is no longer supported.
+**Important:** This alpha release requires **Open Web UI version v0.6.42 or later** for native support due to a change in the knowledge API (now `/api/v1/knowledge/search`, paginated). For Open Web UI versions older than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
 
-Configure the MCP directly in your Open Web UI "External Tools" settings. Set the type to "MCP Streamable HTTP" and Auth to "Session".
+Configure the Tool directly in your Open Web UI "External Tools" settings (or by importing the OpenAPI spec from the running server).
 
-When using docker-compose set URL to "http://genfilesmcp:8015/mcp"
+When using docker-compose set URL to "http://genfilesmcp:8015/openapi.json"
 
 <div style="text-align: center;">
 
-  ![MCP Configuration](img/mcp.png)
+  ![Tool Configuration](img/mcp.png)
 
 </div>
 

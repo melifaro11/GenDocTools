@@ -11,8 +11,9 @@ from utils.download_file import download_file
 from utils.authorization import _get_bearer_token
 from utils.img_dimensions import img_dimensions
 import logging
+import re
 logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("GenFilesMCP")
+logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 
 def vertical_center(metadata_dict: dict, doc: Document) -> int:
     # Constantes
@@ -64,12 +65,28 @@ def vertical_center(metadata_dict: dict, doc: Document) -> int:
     logger.info(f"DOCX: Vertical centering calculated.")
 
     return int(empty_lines)
+def parse_markdown_text(text):
+    # Parse **bold** and *italic* in text
+    # Split on ** and * patterns
+    pattern = r'(\*\*.*?\*\*|\*.*?\*)'
+    parts = re.split(pattern, text)
+    segments = []
+    for part in parts:
+        if part.startswith('**') and part.endswith('**'):
+            segments.append({'text': part[2:-2], 'bold': True, 'italic': False})
+        elif part.startswith('*') and part.endswith('*'):
+            segments.append({'text': part[1:-1], 'bold': False, 'italic': True})
+        else:
+            segments.append({'text': part, 'bold': False, 'italic': False})
+    return segments
 
-def build_docx_from_dict(doc_dict, buffer, ctx, URL):
+def build_docx_from_dict(doc_dict, buffer, request, URL):
     logger.info("DOCX: Starting document generation ...")
 
     metadata_data = doc_dict.get("metadata", {})
     sections_data = doc_dict.get("sections", [])
+    # Sort sections by index_element
+    sections_data.sort(key=lambda x: x.get("index_element", 0))
     font = doc_dict.get("font", "Times New Roman")
     columns_body = doc_dict.get("columns_body", 1)
     columns_body = int(columns_body)
@@ -80,10 +97,11 @@ def build_docx_from_dict(doc_dict, buffer, ctx, URL):
 
     doc = Document()
 
-    empty_lines = vertical_center(metadata_data, doc)
+    if str(metadata_data.get("page_break", False)).lower() == "true":
+        empty_lines = vertical_center(metadata_data, doc)
 
     # Parrafos para centrar verticalmente no están soportados en python-docx/DOCX
-    if metadata_data.get("page_break", False):
+    if str(metadata_data.get("page_break", False)).lower() == "true":
         for _ in range(empty_lines):
             doc.add_paragraph("")
     
@@ -122,17 +140,20 @@ def build_docx_from_dict(doc_dict, buffer, ctx, URL):
             date.runs[0].font.size = Inches(0.1667)
             date.runs[0].font.name = font
     # Nota: La alineación vertical de página no está soportada en python-docx/DOCX
-    # Agregar salto de página después de la portada
-    if metadata_data.get("page_break", False):
-        doc.add_page_break()
-    
-    # Aplicar columnas al body si columns_body > 1
+    # Gestionar salto de página y columnas
+    page_break_requested = str(metadata_data.get("page_break", False)).lower() == "true"
+
     if columns_body > 1:
-        new_section = doc.add_section(start_type=WD_SECTION_START.CONTINUOUS)
+        # Si hay columnas, usamos el section break para controlar el salto de página
+        section_type = WD_SECTION_START.NEW_PAGE if page_break_requested else WD_SECTION_START.CONTINUOUS
+        new_section = doc.add_section(start_type=section_type)
         sectPr = new_section._sectPr
         cols = OxmlElement('w:cols')
         cols.set(qn('w:num'), str(columns_body))
         sectPr.append(cols)
+    elif page_break_requested:
+        # Si no hay columnas pero sí salto, usamos salto manual
+        doc.add_page_break()
     
     # Contadores para numeración automática de captions
     figure_counter = 1
@@ -144,16 +165,19 @@ def build_docx_from_dict(doc_dict, buffer, ctx, URL):
     
     # Procesar elementos
     for item in sections_data:
-        if "paragraph_title" in item and "level" in item:  # ParagraphHeader
+        # Detect type using the discriminator first if available
+        item_type = item.get("type", None)
+        
+        if item_type == "ParagraphHeader" or ("text" in item and "level" in item):  # ParagraphHeader
             current_paragraph = None  # Reset paragraph
-            heading = doc.add_heading(item["paragraph_title"], level=item.get("level", 2))
+            heading = doc.add_heading(item["text"], level=item.get("level", 2))
             # if item.get("alignment") == "center":
             #     heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
             heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
             if heading.runs:
                 heading.runs[0].font.name = font
         
-        elif "paragraph_text" in item or "bold_italic_text" in item:  # ParagraphBody
+        elif item_type == "ParagraphBody" or (item_type is None and "text" in item and "bold" not in item):  # ParagraphBody
             if current_paragraph is None:
                 current_paragraph = doc.add_paragraph()
                 # Set alignment for the paragraph based on the first ParagraphBody
@@ -162,47 +186,49 @@ def build_docx_from_dict(doc_dict, buffer, ctx, URL):
                 # elif item.get("alignment") == "justify":
                 current_paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY 
                 # Default is left
-            # Add run to the current paragraph
-            run = current_paragraph.add_run(item.get("paragraph_text", "") + item.get("bold_italic_text", ""))
-            run.bold = item.get("bold", False)
-            run.italic = item.get("italic", False)
-            run.font.size = Inches(12 / 72)
-            run.font.name = font
-        
-        elif "items" in item:  # ListItem
+            # Parse text for **bold** and *italic*
+            segments = parse_markdown_text(item.get("text", ""))
+            for seg in segments:
+                run = current_paragraph.add_run(seg['text'])
+                run.bold = seg['bold']
+                run.italic = seg['italic']
+                run.font.size = Inches(12 / 72)
+                run.font.name = font
+
+        elif item_type == "ParagraphListItem" or "items" in item:  # ParagraphListItem
             current_paragraph = None  # Reset paragraph
             for it in item["items"]:
                 p = doc.add_paragraph(it, style='List Bullet' if item.get("list_style") == "List Bullet" else 'List Number')
                 if p.runs:
                     p.runs[0].font.name = font
         
-        elif "headers" in item:  # Table
+        elif item_type == "Table" or "table_headers" in item:  # Table
             current_paragraph = None  # Reset paragraph
-            if not item.get("headers") or not item.get("rows"):
-                raise ValueError("Table must have headers and rows.")
+            if not item.get("table_headers") or not item.get("table_rows"):
+                raise ValueError("Table must have table_headers and table_rows.")
             caption_text = item.get("caption", f"Table {table_counter}: ")
             if not item.get("caption"):
                 table_counter += 1
             p = doc.add_paragraph(caption_text, style='Caption')
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            table = doc.add_table(rows=1, cols=len(item["headers"]))
+            table = doc.add_table(rows=1, cols=len(item["table_headers"]))
             table.style = 'Light List Accent 1'
             hdr_cells = table.rows[0].cells
-            for i, hdr in enumerate(item["headers"]):
+            for i, hdr in enumerate(item["table_headers"]):
                 hdr_cells[i].text = hdr
                 for run in hdr_cells[i].paragraphs[0].runs:
                     run.font.name = font
-            for row_data in item["rows"]:
+            for row_data in item["table_rows"]:
                 row_cells = table.add_row().cells
                 for i, cell_data in enumerate(row_data):
                     row_cells[i].text = cell_data
                     for run in row_cells[i].paragraphs[0].runs:
                         run.font.name = font
         
-        elif "id" in item:  # Image
+        elif item_type == "Image" or "id" in item:  # Image
             current_paragraph = None  # Reset paragraph
             try:
-                bearer_token = _get_bearer_token(ctx)
+                bearer_token = _get_bearer_token(request)
                 image_file = download_file(URL, bearer_token, item["id"])
                 if isinstance(image_file, dict) and "error" in image_file:
                     raise ValueError(f"Error downloading image with ID {item['id']}: {image_file['error']['message']}")
@@ -222,7 +248,7 @@ def build_docx_from_dict(doc_dict, buffer, ctx, URL):
             p = doc.add_paragraph(caption_text, style='Caption')
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        elif "latex" in item:  # Equation
+        elif item_type == "Equation" or "latex" in item:  # Equation
             current_paragraph = None  # Reset paragraph
             p = doc.add_paragraph()
             math2docx.add_math(p, item["latex"])

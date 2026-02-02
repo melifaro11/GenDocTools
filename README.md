@@ -1,6 +1,6 @@
-# GenFilesMCP 🧩
+# GenFiles OpenAPI Tool Server 🧩
 
-GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This MCP executes Python templates to produce files, uploads them to an Open Web UI (OWUI) endpoint, and stores them in the user's personal knowledge base. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
+GenFiles is an OpenAPI Tool Server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This server executes Python templates to produce files, uploads them to an Open Web UI (OWUI) endpoint, and stores them in the user's personal knowledge base. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
 
 ## Table of Contents
 
@@ -13,20 +13,22 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
   - [Option 3: Docker Compose](#option-3-docker-compose)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
-  - [MCP Configuration in Open Web UI](#mcp-configuration-in-open-web-ui)
+  - [OpenAPI Tool Server Configuration in Open Web UI](#openapi-tool-server-configuration-in-open-web-ui)
 - [Setup for Document Generation and Review Features](#setup-for-document-generation-and-review-features)
   - [Knowledge Base and Permissions](#knowledge-base-and-permissions)
-  - [MCP Server Document Upload Settings](#mcp-server-document-upload-settings)
-- [Using GenFilesMCP with MCPO in STDIO Mode](#using-genfilesmcp-with-mcpo-in-stdio-mode)
+  - [OpenAPI Tool Server Document Upload Settings](#openapi-tool-server-document-upload-settings)
+  - [System Prompt for your AI Assistant](#system-prompt-for-your-ai-assistant)
 - [Usage Examples](#usage-examples)
   - [Example 1: Generating a DOCX file](#example-1-generating-a-docx-file)
-  - [Example 2: Reviewing a DOCX file with comments](#example-2-reviewing-a-docx-file-with-comments)
+  - [Example 2: Generating a XLSX file](#example-2-generating-a-xlsx-file)
+  - [Example 3: Generating a PPTX file](#example-3-generating-a-pptx-file)
+  - [Example 4: Reviewing a DOCX file with comments](#example-4-reviewing-a-docx-file-with-comments)
 - [Star History](#star-history)
 
 ## Features
 
 - **File Generation**: Creates files in multiple formats (PowerPoint, Excel, Word, Markdown) from user requests.
-- **FastMCP Server**: Receives and processes generation requests via a FastMCP server.
+- **OpenAPI Tool Server**: Exposes endpoints via standard OpenAPI specification for seamless integration with LLMs.
 - **Python Templates**: Uses customizable Python templates to generate files with specific structures.
 - **OWUI Integration**: Automatically uploads generated files to Open Web UI's file API (`/api/v1/files/`) and (`/api/v1/knowledge/`).
 - **Document Review**: Analyzes existing Word documents and adds structured comments for corrections, grammar suggestions, or idea enhancements.
@@ -35,17 +37,17 @@ GenFilesMCP is a Model Context Protocol (MCP) server that generates PowerPoint, 
 
 ## Status
 
-This release is **v0.3.0-alpha.3**. It includes a fix derived from [Open Web UI Discussion #15192](https://github.com/open-webui/open-webui/discussions/15192) to prevent errors when uploading files to knowledge collections. This ensures that users who want to save documents generated or reviewed by their LLM using GenFilesMCP can use the parameter `ENABLE_CREATE_KNOWLEDGE=true` without losing the possibility of using RAG. **Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use GenFilesMCP releases **<= 0.2.2**.
+This release is **v0.3.0-alpha.4** and was tested with Open Web UI v0.7.2.
+
+**Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**.
 
 The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated or reviewed files are automatically added to users' knowledge collections. The original behavior (downloading files from chats) remains unchanged for end users.
-
-> **Note:** If you encounter any errors, please create an issue so we can review it. In the meantime, you can set `ENABLE_CREATE_KNOWLEDGE=false`; this will not affect the file generation or review capabilities.
 
 ## Prerequisites
 
 - **Docker** installed on your system
-- **Open Web UI** instance running (v0.6.42 or later for native MCP support; for older OWUI versions use GenFilesMCP **<= 0.2.2**) 
 - Administrators must enable "Knowledge Access" permission in Workspace Permissions for default or group user permissions
+- This alpha is an OpenAPI Tool Server, no longer an MCP Server.
 
 ## Installation
 
@@ -54,7 +56,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 Pull the pre-built Docker image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.3
+docker pull ghcr.io/baronco/genfiles-openapi:v0.3.0-alpha.4
 ```
 
 Run the container:
@@ -64,8 +66,8 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e OWUI_URL="http://host.docker.internal:3000" \
   -e PORT=YOUR_PORT \
   -e ENABLE_CREATE_KNOWLEDGE=false \
-  --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.3
+  --name gen_files_openapi \
+  ghcr.io/baronco/genfiles-openapi:v0.3.0-alpha.4
 ```
 
 Alternatively, use the `:latest` tag for the most recent version:
@@ -75,8 +77,8 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e OWUI_URL="http://host.docker.internal:3000" \
   -e PORT=YOUR_PORT \
   -e ENABLE_CREATE_KNOWLEDGE=false \
-  --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:latest
+  --name gen_files_openapi \
+  ghcr.io/baronco/genfiles-openapi:latest
 ```
 
 ### Option 2: Building from Source
@@ -93,7 +95,7 @@ cd GenFilesMCP
 2. Build the Docker image:
 
 ```bash
-docker build -t genfilesmcp .
+docker build -t genfiles-openapi .
 ```
 
 3. Run the container:
@@ -104,8 +106,8 @@ docker run -d --restart unless-stopped \
   -e OWUI_URL="http://host.docker.internal:3000" \
   -e PORT=YOUR_PORT \
   -e ENABLE_CREATE_KNOWLEDGE=false \
-  --name gen_files_mcp \
-  genfilesmcp
+  --name gen_files_openapi \
+  genfiles-openapi
 ```
 
 ### Option 3: Docker Compose
@@ -125,28 +127,28 @@ cd GenFilesMCP
 
 ```yaml
 services:
-genfilesmcp:
+genfiles-openapi:
     build:
     context: .
     dockerfile: Dockerfile
-    container_name: genfilesmcp
+    container_name: gen_files_openapi
     environment:
     - ENABLE_CREATE_KNOWLEDGE=false
     - OWUI_URL=http://open-webui:8080
-    - PORT=8015
+    - PORT=8016
 ```
 
 If you only want to use the image published on GitHub, modify the docker-compose.yml:
 
 ```yaml
 services:
-  genfilesmcp:
-    image: ghcr.io/baronco/genfilesmcp:latest
-    container_name: genfilesmcp
+  genfiles-openapi:
+    image: ghcr.io/baronco/genfiles-openapi:latest
+    container_name: gen_files_openapi
     environment:
       - ENABLE_CREATE_KNOWLEDGE=false
       - OWUI_URL=http://open-webui:8080
-      - PORT=8015
+      - PORT=8016
 ```
 
 Finally, run the Docker Compose setup:
@@ -155,64 +157,31 @@ Finally, run the Docker Compose setup:
 docker compose up -d
 ```
 
-### Using GenFilesMCP with MCPO in STDIO Mode
-
-**Note:** This alpha is not compatible with MCPO. Compatibility depends on approval of https://github.com/open-webui/mcpo/pull/273 which would enable passing per-session bearer tokens via headers to MCPO.
-
-To use the GenFilesMCP server in `stdio` mode with MCPO, you need to add it to the `config.json` file. Below is an example configuration:
-
-```json
-{
-  "mcpServers": {
-    "GenFilesMCP": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/Baronco/GenFilesMCP.git@dev",
-        "genfilesmcp"
-      ],
-      "env": {
-        "OWUI_URL": "http://host.docker.internal:3000",
-        "PORT": "8015",
-        "ENABLE_CREATE_KNOWLEDGE": "false",
-        "HTTP_TRANSPORT": "true"
-      }
-    }
-  }
-}
-```
-
-- Replace the `env` values with the appropriate settings for your environment.
-- For more information about MCPO, refer to the [MCPO repository](https://github.com/open-webui/mcpo).
-
 ## Configuration
 
 ### Environment Variables
 
-The MCP server requires the following environment variables:
+The OpenAPI Tool Server requires the following environment variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `OWUI_URL` | URL of your Open Web UI instance | `http://host.docker.internal:3000` |
-| `PORT` | Port where the MCP server will listen | `8015` |
-| `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are automatically added to users' knowledge collections. Set to `true` to enable automatic creation/updating of knowledge collections; set to `false` to disable that behavior and preserve RAG workflows (recommended default for RAG users). NOTE: If `ENABLE_CREATE_KNOWLEDGE=true`, it is mandatory to enable the Open Web UI document option `Bypass Embedding and Retrieval`. | `false` |
-| `HTTP_TRANSPORT` | Determines the transport mode for the MCP server. Set to `true` for `streamable-http` (default) or `false` for `stdio`. | `true` |
+| `PORT` | Port where the OpenAPI Tool Server will listen | `8016` |
+| `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are automatically added to users' knowledge collections. Set to `true` to enable automatic creation/updating of knowledge collections; set to `false` to disable that behavior. | `false` |
 
-### MCP Configuration in Open Web UI
+### OpenAPI Tool Server Configuration in Open Web UI
 
-**Important:** This alpha release requires **Open Web UI version v0.6.42 or later** for native MCP support due to a change in the knowledge API (now `/api/v1/knowledge/search`, paginated). For Open Web UI versions older than v0.6.42, use GenFilesMCP releases **<= 0.2.2**. This alpha is not compatible with MCPO; compatibility depends on approval of https://github.com/open-webui/mcpo/pull/273 (which would allow passing per-session bearer tokens via headers to MCPO). MCPO is no longer supported.
+**Important:** This alpha release requires **Open Web UI version v0.6.42 or later** for native support due to a change in the knowledge API (now `/api/v1/knowledge/search`, paginated). For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**.
 
-Configure the MCP directly in your Open Web UI "External Tools" settings. Set the type to "MCP Streamable HTTP" and Auth to "Session".
+Configure the Tool directly in your Open Web UI "External Tools" settings type to "OpenAPI":
 
-When using docker-compose set URL to "http://genfilesmcp:8015/mcp"
+> URL "http://host.docker.internal:8016"
 
 <div style="text-align: center;">
 
-  ![MCP Configuration](img/mcp.png)
+  ![Tool Configuration](img/openapitool.png)
 
 </div>
-
-**Note for Open Web UI v0.6.40+:** The latest version introduces a "Function Name Filter List" field in the connection settings which may not function correctly. A known workaround is to add a comma `,` in that field. See [Issue #19486](https://github.com/open-webui/open-webui/issues/19486) for details.
 
 > Once Tools are enabled for your model, Open WebUI gives you two different ways to let your LLM use them in conversations. You can decide how the model should call Tools by choosing between: `Default Mode (Prompt-based)` or `Native Mode (Built-in function calling)`, check the documentation for more details: [OWUI Tools](https://docs.openwebui.com/features/plugin/tools/)
 
@@ -254,9 +223,6 @@ class Tools:
         if __files__:
             for f in __files__:
                 chat_context["files"].append({"id": f["id"], "name": f["name"]})
-        #     return chat_context
-        # else:
-        #     return chat_context
 
         # imgs in messages
         parent = __metadata__.get("parent_message", {})
@@ -271,8 +237,7 @@ class Tools:
                 chat_context["attached_images"].append(
                     {
                         "img_id": file_id,
-                        "file_name": filename,
-                        # "content_type": content_type
+                        "file_name": filename
                     }
                 )
 
@@ -287,13 +252,13 @@ class Tools:
 
 </div>
 
-**Note:** This tool is mandatory for the correct functioning of document generation and review features, as it provides the necessary user context (user_id) for storing documents in the user's knowledge base.
+**Note:** This tool is mandatory for the correct functioning of document generation and review features, as it provides the necessary chat context, including file metadata and attached images.
 
 ### Knowledge Base and Permissions
 
 This version integrates with Open Web UI's knowledge base system:
 
-- **Permission Requirement**: Administrators must enable the "Knowledge Access" permission in Workspace Permissions for default or group user permissions: -> Admin Panel -> Users -> Groups -> Default permissisons (or other Group). 
+- **Permission Requirement**: Administrators must enable the "Knowledge Access" permission in Workspace Permissions for default or group user permissions: -> Admin Panel -> Users -> Groups -> Default permissions (or other Group). 
 
 <div style="text-align: center;">
 
@@ -312,41 +277,53 @@ This version integrates with Open Web UI's knowledge base system:
 
 </div>
 
-### MCP Server Document Upload Settings
-
-To support automatic creation of knowledge collections for files generated or reviewed by the MCP server, the Open Web UI document option `Bypass Embedding and Retrieval` must be enabled. This is required only when `ENABLE_CREATE_KNOWLEDGE=true`.
+### OpenAPI Tool Server Document Upload Settings
 
 Behavior summary:
-- If `ENABLE_CREATE_KNOWLEDGE=false` (default recommended for RAG users): The MCP server will NOT create or update knowledge collections for generated/reviewed files. Users who rely on RAG or do not want knowledge collections created can keep this setting disabled and do NOT enable `Bypass Embedding and Retrieval`. Users will still be able to download generated/reviewed files from their chats as before.
-- If `ENABLE_CREATE_KNOWLEDGE=true`: The MCP server will attempt to create/update per-user knowledge collections for generated/reviewed files. In this mode, you MUST enable `Bypass Embedding and Retrieval` in the Open Web UI document options so the knowledge creation/upload flow works correctly.
+- If `ENABLE_CREATE_KNOWLEDGE=false`: The OpenAPI Tool Server will NOT create or update knowledge collections for generated/reviewed files. 
+- If `ENABLE_CREATE_KNOWLEDGE=true`: The OpenAPI Tool Server will create/update per-user knowledge collections for generated/reviewed files.
 
-<div style="text-align: center;">
-
-  ![Bypass Embedding and Retrieval Setting](img/BypassEmbeddingandRetrieval.png)
-
-</div>
-
-## System Prompt for FileGenAgent
+## System Prompt for your AI Assistant
 
 For optimal results, create a custom agent in Open Web UI:
-1. Copy the system prompt from `example/systemprompt.md`
-2. Create a new agent called **FileGenAgent**
-3. Use this system prompt for the agent
-4. Tested successfully with **GPT-5 Thinking mini**
+
+1. Create a new agent called **AI Assistant**
+2. Use this system prompt for the agent `example/systemprompt.md`
+3. Set temperature to `0.5` for balanced creativity and accuracy
+4. Enable Tools for the agent and select the GenFiles OpenAPI Tool
 
 ## Usage Examples
 
 ### Example 1: Generating a DOCX file
 
+This new alpha version v0.3.0-alpha.4 includes improved DOCX generation capabilities for enhancing safety and robustness. Now AI assistants have to focus in the elements required for the document structure and not in the generation of the document using code blocks.
+
 <div style="text-align: center;">
 
-  ![Generating DOCX Example](img/example2.png)
+  ![Generating DOCX Example](img/NewDocxGen.png)
 
 </div>
 
-> **Example files**: You can find the prompt and generated result in the `example` folder: `History_of_Neural_Nets_Summary_69d1751b-577b-4329-beca-ac16db7acdbd.docx`
+This new version can include images embedded directly into the generated Word document, sourced from chat uploads. This allows for richer, visual content in the documents without relying on external links.
 
-> This file was generated using the GenFiles MCP server and GPT-5 mini
+<div style="text-align: center;">
+
+  ![Generating DOCX Example](img/new_docx_example.png)
+
+</div>
+
+Your assistant can generate documents with one column or two columns for academic papers.
+
+You can find results like this in the `example\DOCX` folder of the repository. Models used:
+- GPT 5.2
+- GPT 5.1 mini
+- Kimi K2.5
+- Claude Haiku 4.5
+- Grok 4.1 Fast
+- Gemini 3 Flash Preview
+- Deepseek V3.2
+
+> If your model does not have vision capabilities do not attach images in the chat, as the agent will not be able to see them and include them in the document.
 
 ### Example 2: Generating a XLSX file
 
@@ -365,9 +342,11 @@ Open the generated file in Excel:
 
 </div>
 
+> **Example files**: You can find example XLSX files in the `example` folder.
+
 ### Example 3: Generating a PPTX file
 
-In this example, it was used a MCP server to web research and GenFilesMCP to generate a PowerPoint presentation:
+In this example, it was used a MCP server to web research and GenFiles OpenAPI Tool Server to generate a PowerPoint presentation:
 
 <div style="text-align: center;">
 
@@ -383,7 +362,7 @@ Open the generated file in PowerPoint:
 
 </div>
 
-> **Example files**: You can find the prompt and generated result in the `example` folder: `Cartagena_Temperature_Timeseries.xlsx`
+> **Example files**: You can find example PPTX files in the `example` folder.
 
 ### Example 4: Reviewing a DOCX file with comments
 
@@ -401,18 +380,12 @@ The review feature allows the agent to analyze uploaded documents and add struct
 
 </div>
 
-<div style="text-align: center;">
-
-  ![Review Example 3](img/reviewer3.png)
-
-</div>
-
 **Workflow:**
 1. User uploads `History_of_Neural_Nets_Summary.docx` to the chat
 2. User requests a review with comments for corrections, grammar suggestions, and idea enhancements
-3. Agent calls the `get_files_metadata` custom tool to retrieve file ID and name
-4. Agent uses the `full_context_docx` MCP function to analyze the document structure
-5. Agent calls the `review_docx` MCP function to add comments to specific elements
+3. Agent calls the `chat_context` custom tool to retrieve file ID and name
+4. Agent uses the `list_docx_elements` tool to analyze the document structure
+5. Agent calls the `review_docx_document` tool to add comments to specific elements
 
 **Result:**
 
@@ -422,41 +395,13 @@ The review feature allows the agent to analyze uploaded documents and add struct
 
 </div>
 
-> **Example files**: Find the reviewed document in the `example` folder: `History_of_Neural_Nets_Summary_reviewed_a35adcc5-e338-47c6-a0b0-2c21602b0777.docx`
+> **Example files**: Find the reviewed document in the `example` folder: `History_of_Neural_Nets_Summary_69d1751b-577b-4329-beca-ac16db7acdbd_reviewed.docx`
 
-> Generated using the GenFiles MCP server and GPT-5 mini
+> Generated using the GenFiles OpenAPI Tool Server and GPT-5 mini
 
 > The review functionality preserves the original formatting while adding structured comments
 
-### Example 5: Generating a DOCX file with embedded images
-
-GenFilesMCP now supports embedding images directly into generated Word documents. Images can be included from the chat context, allowing for rich, visual content in docx files. `chat_context` now retrieves image metadata from chat messages, enabling the MCP server to access and embed these images in the generated documents.
-
-In this example, using gpt-5.2, the GenFiles assistant generated a Word document about Gradient Descent using a markdown that originally contained spanish text and images. User had to upload the images and the .md file to the chat, and then request the generation of a Word document with the images embedded:
-
-<div style="text-align: center;">
-
-  ![Images in DOCX](img/imgs_in_docx.png)
-
-</div>
-
-**Workflow:**
-1. User uploads images and a markdown file to the chat
-2. User requests the generation of a Word document with embedded images
-3. Agent calls the `chat_context` tool to retrieve image metadata from the chat
-4. Agent uses the `generate_docx_with_images` MCP function to create the Word document with embedded images
-
-**Result:**
-
-<div style="text-align: center;">
-
-  ![DOCX with Images Example](img/docx-2397.GIF)
-
-</div>
-
-> **Example files**: You can find the original result in the `example` folder of the repository: `Gradient_Descent_EN.docx`
-
-> This only works with vision-capable models.
+## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Baronco/GenFilesMCP&type=date&legend=top-left)](https://www.star-history.com/#Baronco/GenFilesMCP&type=date&legend=top-left)
 

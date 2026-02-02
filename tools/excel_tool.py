@@ -1,7 +1,3 @@
-"""
-Tool for generating Excel files using user-provided Python scripts.
-"""
-
 from io import BytesIO
 from utils.upload_file import upload_file
 from utils.knowledge import create_knowledge
@@ -10,9 +6,9 @@ from utils.authorization import _get_bearer_token
 from json import dumps
 import logging
 
-logger = logging.getLogger("GenFilesMCP")
+logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 
-def generate_excel(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
+def generate_excel(python_script, file_name, request, URL, ENABLE_CREATE_KNOWLEDGE):
     """
     Generate an Excel file using an AI-generated Python script.
 
@@ -26,18 +22,19 @@ def generate_excel(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
         try:
             exec(python_script, context)
         except Exception as exec_e:
-            return {"error": {"message": f"Error executing script: {str(exec_e)}"}}
+            return {"error": {"message": f"=> Error executing script: {str(exec_e)}"}}
 
         buffer.seek(0)
 
         try:
-            bearer_token = _get_bearer_token(ctx)
-            logger.info("Received authorization header!")
+            bearer_token = _get_bearer_token(request)
+            logger.info("=> Received authorization header!")
         except:
-            logger.error("Error retrieving authorization header")
+            logger.error("=> Error retrieving authorization header")
 
         user_id = get_user_id(URL, bearer_token)
         if not user_id:
+            logger.error("=> Error obtaining user id from token")
             return dumps({"error": {"message": "Error obtaining user id from token"}}, indent=4, ensure_ascii=False)
 
         response, request_data = upload_file(
@@ -56,17 +53,18 @@ def generate_excel(python_script, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
                 user_id=user_id
             )
             if create_knowledge_status:
-                logger.info("Knowledge base updated successfully.")
+                logger.info("=> Knowledge base updated successfully.")
             else:
-                logger.error("Error creating or updating knowledge base")
+                logger.error("=> Error creating or updating knowledge base")
         elif "error" in response:
-            logger.error("Error uploading the file.")
+            logger.error("=> Error uploading the file.")
         else:
-            logger.info("Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
+            logger.info("=> Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
 
         return response 
     
     except Exception as e:
+        logger.error("=> An unknown error occurred during .XLSX document generation.")
         return dumps(
             {
                 "error": {

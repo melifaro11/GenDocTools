@@ -1,4 +1,5 @@
-Generates PowerPoint, Excel, Word, or Markdown files from user requests:
+GenFiles is a OpenAPI Tool Servers that allows IA assistants to generate PowerPoint, Excel, Word, or Markdown files according to user instructions. Also, it can review existing Word files by analyzing their structure and adding comments.
 
-- Use `generate_powerpoint`, `generate_excel`, `generate_word`, or `generate_markdown` for creating new files.
-- For reviewing existing files: Use `full_context_docx` to analyze structure and `review_docx` to add comments.
+## Available tools
+- Use `generate_powerpoint_presentation`, `generate_excel_workbook`, `generate_markdown_document`, or `generate_word_document` for creating new files.
+- For reviewing existing files: Use `list_docx_elements` to analyze structure and `review_docx_document` to add comments.

@@ -1,54 +1,40 @@
-Generates a Word document for reports or academic papers, including headers, paragraphs, lists, tables, images, equations, and bold/italic text formatting.
+This tool generates a Word document for reports or academic papers.
 
-The arguments `document_cover`, `columns_body`, `document_body_elements` and `file_name` are mandatory and have to be valid dictionaries. If any of these are missing or are not valid dictionaries, the function will raise a `ValueError`. 
+### How it works:
+- All elements across all lists must have unique `index_element` values (integers starting from 1).
+- The backend sorts all elements by `index_element` and builds the document in that order.
+- `index_element` by element are not necessarily sequential; gaps are allowed because it depends on the combination of elements used.
 
-# Arguments
+### Requirements:
 
-- **file_name**: str - The desired name of the Word file (without extension).
+- Use paragraphs of no more than 4 lines. For line breaks within a paragraph, use \n. To separate paragraphs, use double line breaks \n\n. Paragraphs support bold and italic text using **bold text** and *italic text*, respectively. Only document_paragraphs elements can contain bold and italic formatting; other elements do not support text formatting.
+- No lists or equations in paragraph text; use separate `document_lists` or `document_equations`.
+- Captions required for tables, images, equations.
+- Unique `index_element` values.
+- Use Unicode characters directly (e.g., ∑, not \\u2211).
 
-- **document_cover**: A Cover object containing:
-  - title: str - The main title of the document.
-  - subtitle: str - The subtitle.
-  - description: str - A brief description.
-  - author: str - The author's name.
-  - month: str - The month (e.g., "January").
-  - year: str - The year (e.g., "2023").
-  - page_break: bool - Whether to add a page break after the cover (default: false). 
+### Logic behind the smart ordering and generation of a DOCX file:
 
-- **columns_body**: int - Number of columns for the body sections (1 or 2). 1 is for general reports, 2 is for papers following academic formats.
+If you as an AI assistant, according to the user's request, plan to create a document with the following sequence of elements:
 
-- **document_body_elements**: A list of document elements, the order of elements defines their sequence in the document. Supported elements include:
+1. Header: "Introduction"
+2. Paragraph: "This is the first paragraph of the document..."
+3. Table: "Table 1: Sample Data"
+4. Header: "Background"
+5. Paragraph: "This is another paragraph that follows a header."
+6. List: Bullet list with three items
+7. Image: "Fig. 1: Sample Image"
+8. Equation: "Equation 1: Einstein's Mass-Energy Equivalence"
+9. Paragraph: "This is an example with **bold** and *italic* text."
 
-  - **ParagraphHeader**: Use this element to create a heading.
-    - paragraph_title: str - The heading text.
-    - level: int (1-6) - The heading level (1 for main title, 2 for section, etc.).
+You have to set up the elements with the following `index_element` values:
 
-  - **ParagraphBody**: Use this element to create a paragraph of text.
-    - paragraph_text: str - The paragraph text. Use '\n\n' for paragraph breaks.
-    - **Never user markdown formatting only plain text**.
-    - **Never use bold or italic formatting in this element, use WordsWithBoldOrItalic instead**.
+- document_headers = [1, 4]
+- document_paragraphs = [2, 5, 9]
+- document_tables = [3]
+- document_lists = [6]
+- document_images = [7]
+- document_equations = [8]
 
-  - **WordsWithBoldOrItalic**: Use this element to add words or phrases with bold or italic formatting within a paragraph.
-    - **Never user markdown formatting only plain text**.
-    - bold_italic_text: str - The text content.
-    - bold: bool - Whether the text is bold.
-    - italic: bool - Whether the text is italic.
+In this example, the backend will create the DOCX file by ordering all elements based on their `index_element` values from 1 to 9. This document will have a logical order, easily readable for humans.
 
-  - **ListItem**: Use this element to create a list (bulleted or numbered).
-    - list_style: str - "List Number" for numbered list or "List Bullet" for bulleted list.
-    - items: List[str] - The list of item texts.
-
-  - **Table**: Use this element to create a table.
-    - headers: List[str] - The table headers.
-    - rows: List[List[str]] - The table rows, each as a list of cell values.
-    - caption: Optional[str] - An optional caption for the table.
-
-  - **Image**: Use this element to insert an image.
-    - id: str - The image file ID (preloaded by the server).
-    - caption: Optional[str] - An optional caption for the image.
-
-  - **Equation**: Use this element to insert a mathematical equation. 
-    - latex: str - The LaTeX code for the equation.
-    - caption: Optional[str] - An optional caption for the equation.
-
-Never use markdown syntax for bold or italic text formatting, use the respective keys to set bold or italic text. Never include equations in paragraphs, use the respective keys to set equations. Never list items in paragraphs, use the respective keys to set list items.

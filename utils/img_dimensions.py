@@ -1,7 +1,7 @@
 from PIL import Image
 import logging
 logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("GenFilesMCP")
+logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 
 def img_dimensions(img, body_columns = 1) -> tuple:
     """
@@ -20,9 +20,9 @@ def img_dimensions(img, body_columns = 1) -> tuple:
     aspect_ratio = img_width / img_height
 
     if aspect_ratio >= 1:
-        logger.info("DOCX: The image is landscape")
+        logger.info("=> DOCX: The image is landscape")
     else:
-        logger.info("DOCX: The image is portrait")
+        logger.info("=> DOCX: The image is portrait")
 
     if body_columns == 1:
         width = 4.0
@@ -31,6 +31,6 @@ def img_dimensions(img, body_columns = 1) -> tuple:
         width = 2.5
         height = width / aspect_ratio
 
-    logger.info(f"DOCX: Image dimensions set to width={width} inches, height={height} inches for {body_columns} column(s)")
+    logger.info(f"=> DOCX: Image dimensions set to width={round(width, 2)} inches, height={round(height, 2)} inches for {body_columns} column(s)")
 
     return width, height

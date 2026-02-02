@@ -1,7 +1,6 @@
-"""
-Utility functions for uploading files to the server.
-"""
-
+import logging
+logging.basicConfig(level=logging.INFO, force=True)
+logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 from requests import post
 from json import dumps
 from io import BytesIO
@@ -49,9 +48,11 @@ def upload_file(url: str, token: str, file_data: BytesIO, filename:str, file_typ
     response = post(url, headers=headers, files=files, params=params, timeout=60)
 
     if response.status_code != 200:
+       logger.error(f"=> Error uploading generated file: {response.status_code}, {response.text}")
        return dumps({"error":{"message": f'Error uploading file: {response.status_code}, {response.text}'}}), response
     elif response.status_code == 200:
-        response_path_download = f"Download the generated file using the following markdown hyperlink format `[Download {filename}.{file_type}](/api/v1/files/{response.json()['id']}/content)`. If you modify this hyperlink users will not be able to download the file."
+        logger.info("=> Generated file uploaded successfully.")
+        response_path_download = f"The file has been generated successfully! Provide to the user the following markdown hyperlink format `[Download {filename}.{file_type}](/api/v1/files/{response.json()['id']}/content)`. If you modify this hyperlink users will not be able to download the file."
         return dumps({
             "file_path_download": response_path_download,#f"[Download {filename}.{file_type}](/api/v1/files/{response.json()['id']}/content)"
             },

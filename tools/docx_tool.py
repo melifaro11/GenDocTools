@@ -1,16 +1,7 @@
-"""
-Combined DOCX utilities:
-- full_context_docx(file_id, file_name, ctx, URL)
-- review_docx(file_id, file_name, review_comments, ctx, URL, ENABLE_CREATE_KNOWLEDGE)
-
-This module merges `full_context_docx.py` and `review_docx.py` and centralizes common logic.
-"""
-
 from io import BytesIO
 from json import dumps
 from pathlib import Path
 import logging
-
 from docx import Document
 
 from utils.download_file import download_file
@@ -19,16 +10,16 @@ from utils.knowledge import create_knowledge
 from utils.get_user_id import get_user_id
 from utils.authorization import _get_bearer_token
 
-logger = logging.getLogger("GenFilesMCP")
+logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 
-def full_context_docx(file_id, file_name, ctx, URL):
+def full_context_docx(file_id, file_name, request, URL):
     """
     Return the structure of a DOCX document including index, style, and text of each element.
 
     Returns:
         str: JSON-formatted string with the document structure or an error object.
     """
-    bearer_token = _get_bearer_token(ctx)
+    bearer_token = _get_bearer_token(request)
 
     try:
         docx_file = download_file(
@@ -64,121 +55,14 @@ def full_context_docx(file_id, file_name, ctx, URL):
     except Exception as e:
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)
 
-
-def generate_word(python_script, file_name, images_list, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
-    """
-    Generate a Word document using an AI-generated Python script.
-
-    Returns:
-        dict: Contains 'file_path_download' with a markdown hyperlink for downloading the generated Word file.
-    """
-    try:
-        images = [] # to save bytesIO images
-
-        if len(images_list) > 0:
-            logger.info(f"Received {len(images_list)} images for DOCX generation.")
-
-        # download images
-        for idx, image in enumerate(images_list):
-            image_file = download_file(URL, _get_bearer_token(ctx), image)
-            if isinstance(image_file, dict) and "error" in image_file:
-                return {"error": {"message": f"Error downloading image with ID {image}: {image_file['error']['message']}"}}
-            images.append(image_file)
-        
-        
-
-        # Download images list of BytesIO
-        # images = []
-
-        # # Solo aceptar lista de ImagesList (modelo Pydantic)
-        # image_ids = []
-        # logger.info(f"images_list type: {type(images_list)}, value: {images_list}")
-        # if isinstance(images_list, list) and images_list:
-        #     for idx, item in enumerate(images_list):
-        #         logger.info(f"images_list[{idx}] type: {type(item)}, value: {item}")
-        #         # Debe ser instancia de ImagesList y tener atributo images como str
-        #         if hasattr(item, 'images') and isinstance(item.images, str):
-        #             image_ids.append(item.images)
-        #         else:
-        #             logger.warning(f"images_list[{idx}] no es ImagesList o no tiene atributo images como str")
-        # if image_ids:
-        #     for image_id in image_ids:
-        #         image_file = download_file(URL, _get_bearer_token(ctx), image_id)
-        #         if isinstance(image_file, dict) and "error" in image_file:
-        #             return {"error": {"message": f"Error downloading image with ID {image_id}: {image_file['error']['message']}"}}
-        #         images.append(image_file)
-        #     logger.info(f"Downloaded {len(images)} images for DOCX generation.")
-        # else:
-        #     logger.error("images_list is not a list of ImagesList or contains no images. No images will be included in the DOCX generation.")
-
-        # Prepare the execution context with images
-        buffer = BytesIO()
-        buffer.name = f'{file_name}.docx'
-        context = {"docx_buffer": buffer, "images": images}
-        try:
-            exec(python_script, context)
-        except Exception as exec_e:
-            return {"error": {"message": f"Error executing script: {str(exec_e)}"}}
-
-        buffer.seek(0)
-
-        bearer_token = _get_bearer_token(ctx)
-        if bearer_token:
-            logger.info("Received authorization header")
-        else:
-            logger.debug("Authorization header not present")
-
-        user_id = get_user_id(URL, bearer_token)
-        if not user_id:
-            return dumps({"error": {"message": "Error obtaining user id from token"}}, indent=4, ensure_ascii=False)
-
-        response, request_data = upload_file(
-            url=URL, 
-            token=bearer_token, 
-            file_data=buffer,
-            filename=file_name,
-            file_type="docx"
-        )
-
-        if "file_path_download" in response and ENABLE_CREATE_KNOWLEDGE:
-            create_knowledge_status = create_knowledge(
-                url=URL,
-                token=bearer_token,
-                file_id=request_data['id'],
-                user_id=user_id
-            )
-            if create_knowledge_status:
-                logger.info("Knowledge base updated successfully.")
-            else:
-                logger.error("Error creating or updating knowledge base")
-        elif "error" in response:
-            logger.error("Error uploading the file.")
-        else:
-            logger.info("Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
-
-        return response 
-    
-    except Exception as e:
-        error_message = str(e) if str(e) else "An unknown error occurred during document generation."
-        return dumps(
-            {
-                "error": {
-                    "message": error_message
-                }
-            }, 
-            indent=4, 
-            ensure_ascii=False
-        )
-
-
-def review_docx(file_id, file_name, review_comments, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
+def review_docx(file_id, file_name, review_comments, request, URL, ENABLE_CREATE_KNOWLEDGE):
     """
     Review an existing DOCX document and add comments to specified elements.
 
     Returns:
         dict or str: Upload response dict (with 'file_path_download') or JSON-formatted error string.
     """
-    bearer_token = _get_bearer_token(ctx)
+    bearer_token = _get_bearer_token(request)
 
     user_id = get_user_id(URL, bearer_token)
     if not user_id:
@@ -233,20 +117,20 @@ def review_docx(file_id, file_name, review_comments, ctx, URL, ENABLE_CREATE_KNO
                 knowledge_name="Documents Reviewed by AI"
             )
             if create_knowledge_status:
-                logger.info("Knowledge base updated successfully.")
+                logger.info("=> Knowledge base updated successfully.")
             else:
-                logger.error("Error creating or updating knowledge base")
+                logger.error("=> Error creating or updating knowledge base")
         elif "error" in response:
-            logger.error("Error uploading the file.")
+            logger.error("=> Error uploading the file.")
         else:
-            logger.info("Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
+            logger.info("=> Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
 
         return response
 
     except Exception as e:
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)
 
-def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
+def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name, request, URL, ENABLE_CREATE_KNOWLEDGE):
     """
     Generate a Word document from metadata and a list of sections.
 
@@ -256,7 +140,7 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
     try:
         # Convert Pydantic models to dicts
         metadata_data = doc_metadata.model_dump()
-        sections_data = [section.model_dump() for section in doc_dict]
+        sections_data = [section.model_dump(exclude_none=True) for section in doc_dict]
         
         # Create full doc dict
         doc_full = {
@@ -272,10 +156,10 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
         
         # Build the document
         from utils.document_builder import build_docx_from_dict
-        buffer = build_docx_from_dict(doc_full, buffer, ctx, URL)
+        buffer = build_docx_from_dict(doc_full, buffer, request, URL)
         
         # Upload the file
-        bearer_token = _get_bearer_token(ctx)
+        bearer_token = _get_bearer_token(request) 
         if bearer_token:
             logger.info("Received authorization header")
         else:
@@ -301,15 +185,16 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
                 user_id=user_id
             )
             if create_knowledge_status:
-                logger.info("Knowledge base updated successfully.")
+                logger.info("=> Knowledge base updated successfully.")
             else:
-                logger.error("Error creating or updating knowledge base")
+                logger.error("=> Error creating or updating knowledge base")
         elif "error" in response:
-            logger.error("Error uploading the file.")
+            logger.error("=> Error uploading the file.")
         else:
-            logger.info("Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
+            logger.info("=> Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
 
         return response
 
     except Exception as e:
+        logger.error("=> An unknown error occurred during DOCX document generation.")
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)

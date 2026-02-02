@@ -1,13 +1,9 @@
-"""
-Utility functions for managing knowledge bases on the server.
-"""
-
 from requests import post, get
 from json import dumps
 from io import BytesIO
 import logging
 logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("GenFilesMCP")
+logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 from collections import defaultdict
 
 def transform_list_of_knowledge_to_dict(knowledge_list) -> dict:
@@ -83,7 +79,7 @@ def check_knowledge_exists(url: str, token: str, query: str = None) -> dict:
         response = get(endpoint, headers=headers, params=params)
 
         if response.status_code != 200:
-            logger.error(f"Error fetching knowledge list (page {page}), status code => {response.status_code}")
+            logger.error(f"=> Error fetching knowledge list (page {page}), status code => {response.status_code}")
             # Return None to indicate failure so callers can detect and handle it
             return None
 
@@ -118,7 +114,7 @@ def check_knowledge_exists(url: str, token: str, query: str = None) -> dict:
         page += 1
 
     knowledge_dict = transform_list_of_knowledge_to_dict(aggregated_items)
-    logger.info("Knowledge items fetched successfully")
+    logger.info("=> Knowledge items fetched successfully")
     return knowledge_dict
     
 def add_file_to_knowledge(url: str, token: str, knowledge_id: str, file_id: str) -> bool:
@@ -150,10 +146,10 @@ def add_file_to_knowledge(url: str, token: str, knowledge_id: str, file_id: str)
 
     # Return True if the file was added successfully, else False
     if response.status_code == 200:
-        logger.info("File added to knowledge base successfully.")
+        logger.info("=> File added to knowledge base successfully.")
         return True
     else:
-        logger.error(f"Error adding file to knowledge base, status code => {response.status_code}")
+        logger.error(f"=> Error adding file to knowledge base, status code => {response.status_code}")
         return False
     
 def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge_name: str = 'My Generated Files') -> bool:
@@ -174,7 +170,7 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
     knowledge_dicts = check_knowledge_exists(url, token, query=knowledge_name)
     
     if not isinstance(knowledge_dicts, dict):
-        logger.error("Failed to check knowledge exists")
+        logger.error("=> Failed to check knowledge exists")
         return False
 
     # If it exists, do nothing; otherwise, create it.
@@ -185,10 +181,10 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
         current_files = knowledge_dicts[user_id][knowledge_name].get('files_ids', [])
 
         if file_id in current_files:
-            logger.info(f"File {file_id} already exists in knowledge base. No action taken.")
+            logger.info(f"=> File {file_id} already exists in knowledge base. No action taken.")
             return True
         else:
-            logger.info(f"File {file_id} not found in knowledge base {knowledge_name}. Proceeding to add the file.")
+            logger.info(f"=> File {file_id} not found in knowledge base {knowledge_name}. Proceeding to add the file.")
 
             # Add the uploaded file to the knowledge base
             add_file_state = add_file_to_knowledge(
@@ -197,7 +193,7 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
                 knowledge_id=knowledge_dicts[user_id][knowledge_name]['knowledge_id'],
                 file_id=file_id
             )
-        logger.info("Knowledge base already exists. Added file to existing knowledge base of user.")
+        logger.info("=> Knowledge base already exists. Added file to existing knowledge base of user.")
 
         return add_file_state
     else:
@@ -222,13 +218,13 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
 
         # Return True if created successfully, else False
         if response.status_code == 200:
-            logger.info("Knowledge base created successfully.")
+            logger.info("=> Knowledge base created successfully.")
 
             # Get the new knowledge id
             knowledge_data = response.json()
             knowledge_id = knowledge_data.get('id')
             if not knowledge_id:
-                logger.error("No id in response after creating knowledge")
+                logger.error("=> No id in response after creating knowledge")
                 return False
 
             # Add the uploaded file to the knowledge base
@@ -240,11 +236,11 @@ def create_knowledge(url: str, token: str, file_id: str, user_id: str, knowledge
             )
 
             if add_file_state:
-                logger.info("File added to knowledge base successfully.")
+                logger.info("=> File added to knowledge base successfully.")
             else:
-                logger.error(f"Error adding file to knowledge base")
+                logger.error(f"=> Error adding file to knowledge base")
 
             return True
         else:
-            logger.error(f"Error creating knowledge base")
+            logger.error(f"=> Error creating knowledge base")
             return False 

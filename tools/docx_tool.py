@@ -140,7 +140,7 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
     try:
         # Convert Pydantic models to dicts
         metadata_data = doc_metadata.model_dump()
-        sections_data = [section.model_dump(exclude_none=True) for section in doc_dict]
+        sections_data = [section if isinstance(section, dict) else section.model_dump(exclude_none=True) for section in doc_dict]
         
         # Create full doc dict
         doc_full = {

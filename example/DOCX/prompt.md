@@ -1,0 +1,1 @@
+Help me create a Word document about gradient descent, including formulas, tables, and detailed explanations. Cover the different types of gradient descent, the mathematics behind the algorithm, and also include the images I attach to complement your content. The document should be in a two-column layout. Gen a detailed docx, use as a prefix name [your-model-name]

@@ -1,5 +1,6 @@
-import logging
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Centralized argument descriptions for tools
 try:
@@ -19,24 +20,24 @@ try:
             "review_comments": "List of objects where each object has keys: 'index' (int) and 'comment' (str). Example: [{'index': 0, 'comment': 'Fix typo'}].",
         }
     }
-    ASCII_INFO = r"""
-        ┌─────────────────────────────────────────────────────────────┐
-                        🛠️ Gen Files OpenAPI Tool Server
-        ├───────────────────────────────┬─────────────────────────────┤      
-                        ⚙️ Processing & Generating Documents
-        ├───────────────────────────────┬─────────────────────────────┤
-                        🔄 Transforming Ideas into Files               
-        ├───────────────────────────────┬─────────────────────────────┤
-                .md   .docx   .pptx   .xlsx        🚀 Powered by AI   
-        └───────────────────────────────┬─────────────────────────────┘
-        ┌───────────────────────────────▼─────────────────────────────┐
-                      🤖 AI-Powered Document Review System (DOCX Only)          
-                      📝 Intelligent Comments & Suggestions Added               
-        └─────────────────────────────────────────────────────────────┘
 
-        v0.3.0-alpha.4
-        🌐 https://github.com/Baronco/GenFilesMCP
+    SERVER_VERSION = "v0.3.0-alpha.5 ⚡"
+
+    SERVER_BANNER = f"""
+    
+    🛠️ Gen Files MCP  Server
+    ⚙️ Processing & Generating Documents
+    🔄 Transforming Ideas into Files               
+    You can generate '.md', '.docx', '.pptx' y '.xlsx' 🚀 Powered by AI   
+    🤖 AI-Powered Document Review System (DOCX Only)          
+    📝 Intelligent Comments & Suggestions Added               
+
+    {SERVER_VERSION}
+    🌐 https://github.com/Baronco/GenFilesMCP
     """
+
+    MCP_SERVER_NAME = f"Gen Files MCP Server"
+
 except Exception as e:
-    logger.exception("=> Error initializing ARGUMENT_DESCRIPTIONS")
+    logger.error("Error initializing ARGUMENT_DESCRIPTIONS")
     raise

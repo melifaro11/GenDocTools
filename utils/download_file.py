@@ -4,6 +4,9 @@ Utility functions for downloading files from the server.
 
 from requests import get
 from io import BytesIO
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def download_file(url: str, token: str, file_id: str) -> BytesIO:
     """
@@ -22,9 +25,14 @@ def download_file(url: str, token: str, file_id: str) -> BytesIO:
         'Accept': 'application/json'
     }
     # Send the GET request
-    response = get(url, headers=headers)
+    try:
+        response = get(url, headers=headers)
+    except Exception:
+        logger.error("=> Error downloading file.")
+        return {"error": {"message": "Error downloading the file."}}
 
     if response.status_code != 200:
+       logger.error("=> Error downloading file.")
        return {"error":{"message": f'Error downloading the file: {response.status_code}'}}
     else:
         return BytesIO(response._content) 

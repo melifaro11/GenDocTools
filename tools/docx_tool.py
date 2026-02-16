@@ -1,8 +1,8 @@
 from io import BytesIO
 from json import dumps
 from pathlib import Path
-import logging
 from docx import Document
+from utils.logger import get_logger
 
 from utils.download_file import download_file
 from utils.upload_file import upload_file
@@ -10,7 +10,7 @@ from utils.knowledge import create_knowledge
 from utils.get_user_id import get_user_id
 from utils.authorization import _get_bearer_token
 
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
+logger = get_logger(__name__)
 
 def full_context_docx(file_id, file_name, request, URL):
     """
@@ -55,7 +55,7 @@ def full_context_docx(file_id, file_name, request, URL):
     except Exception as e:
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)
 
-def review_docx(file_id, file_name, review_comments, request, URL, ENABLE_CREATE_KNOWLEDGE):
+def review_docx(file_id, file_name, review_comments, request, URL, ENABLE_CREATE_KNOWLEDGE, REVIEWER_AI_ASSISTANT_NAME):
     """
     Review an existing DOCX document and add comments to specified elements.
 
@@ -91,8 +91,7 @@ def review_docx(file_id, file_name, review_comments, request, URL, ENABLE_CREATE
                     doc.add_comment(
                         runs=[para.runs[0]],
                         text=comment_text,
-                        author="AI Reviewer",
-                        initials="AI"
+                        author=REVIEWER_AI_ASSISTANT_NAME
                     )
 
         buffer = BytesIO()
@@ -161,9 +160,9 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
         # Upload the file
         bearer_token = _get_bearer_token(request) 
         if bearer_token:
-            logger.info("Received authorization header")
+            logger.info("=> Received authorization header")
         else:
-            logger.debug("Authorization header not present")
+            logger.debug("=> Authorization header not present")
 
         user_id = get_user_id(URL, bearer_token)
         if not user_id:
@@ -181,7 +180,7 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
             create_knowledge_status = create_knowledge(
                 url=URL,
                 token=bearer_token,
-                file_id=request_data['id'],
+                file_id=request_data['id'], 
                 user_id=user_id
             )
             if create_knowledge_status:

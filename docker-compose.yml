@@ -1,16 +1,17 @@
 services:
-  genfiles-openapi:
+  genfiles-mcp:
     build:
       context: .
       dockerfile: Dockerfile
     # if you don't need/want to build, comment out the 3 lines above and uncomment line below
     # currently you need to build for ARM
-#    image: ghcr.io/baronco/genfiles-openapi:latest
-    container_name: genfiles-openapi
+#    image: ghcr.io/baronco/genfilesmcp:latest
+    container_name: gen_files_mcp
     environment:
       - ENABLE_CREATE_KNOWLEDGE=false    # true/false
       - OWUI_URL=http://open-webui:8080  # default name and port for OWUI with docker: http://open-webui:8080
       - PORT=8016
+      - REVIEWER_AI_ASSISTANT_NAME=GenFilesMCP  # this is the name that will appear in the Open WebUI interface when the model calls the tool, you can change it to whatever you want
 #    networks:                # open-webui and genfiles-openapi must be on the same docker network, depending on your setup, default network is probably fine
 #      - ollama-tools
 

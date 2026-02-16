@@ -1,17 +1,18 @@
 # Native libraries
+from json import dumps
 from os import getenv
 from typing import Annotated, Literal, List, Tuple, Union, Any, Optional
-import logging
 
 # Third-party libraries
-from fastapi import FastAPI, HTTPException, Request, Depends, Body, Header
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import Field, BaseModel, field_validator, model_validator
+from fastmcp import FastMCP,  Context
+from fastmcp.server.dependencies import get_http_headers
 import uvicorn
 
 # Utilities
+from utils.logger import configure_logging, get_logger
+configure_logging()
 from utils.load_md_templates import load_md_templates
-from utils.argument_descriptions import ASCII_INFO
+from utils.argument_descriptions import SERVER_BANNER, MCP_SERVER_NAME, SERVER_VERSION
 from utils.pydantic_models_endpoints import (
     GeneratePowerPointRequest,
     GenerateExcelRequest,
@@ -27,196 +28,167 @@ from tools.excel_tool import generate_excel as _generate_excel
 from tools.markdown_tool import generate_markdown as _generate_markdown
 from tools.docx_tool import full_context_docx as _full_context_docx, review_docx as _review_docx, generate_word_from_template as _generate_word_from_template
 
-# Configure Logging
-logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
-
 # Parameters
 OWUI_URL = getenv('OWUI_URL', 'http://localhost:8080')
 PORT = int(getenv('PORT', '8000'))
+REVIEWER_AI_ASSISTANT_NAME = getenv('REVIEWER_AI_ASSISTANT_NAME', 'GenFilesMCP')
 POWERPOINT_TEMPLATE, EXCEL_TEMPLATE, WORD_TEMPLATE, MARKDOWN_TEMPLATE, MCP_INSTRUCTIONS = load_md_templates()
 ENABLE_CREATE_KNOWLEDGE = getenv('ENABLE_CREATE_KNOWLEDGE', 'true').lower() == 'true'
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Gen Files OpenAPI Tool Server",
-    version="0.3.0-alpha.5",
-    description=MCP_INSTRUCTIONS,
+# Initialize FastMCP server
+mcp = FastMCP(
+    name = MCP_SERVER_NAME,
+    instructions = MCP_INSTRUCTIONS,   
 )
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure Logging
+logger = get_logger(MCP_SERVER_NAME)
 
-def has_long_consecutive_run(nums, max_run=3):
-    if not nums or len(nums) < max_run + 1:
-        return False
-    nums = sorted(set(nums))
-    current_run = 1
-    for i in range(1, len(nums)):
-        if nums[i] == nums[i-1] + 1:
-            current_run += 1
-            if current_run > max_run:
-                return True
-        else:
-            current_run = 1
-    return False
-
-@app.post(
-    "/generate_powerpoint", 
-    summary="Generate PowerPoint", 
-    description=POWERPOINT_TEMPLATE,
-    operation_id="generate_powerpoint_presentation"
+@mcp.tool(
+    name = "generate_powerpoint",
+    title = "Generate PowerPoint",
+    description = POWERPOINT_TEMPLATE
 )
-def generate_powerpoint(request: Request, body: GeneratePowerPointRequest):
+async def generate_powerpoint(
+    body: GeneratePowerPointRequest
+):
     """Generates a PowerPoint presentation using a provided Python script."""
-    return _generate_powerpoint(body.python_script, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
- 
-@app.post(
-    "/generate_excel", 
-    summary="Generate Excel", 
-    description=EXCEL_TEMPLATE,
-    operation_id="generate_excel_workbook"
+    logger.info("Received request to generate PowerPoint presentation")
+
+    try:
+        # headers
+        request = {"headers": get_http_headers()}
+        return _generate_powerpoint(body.python_script, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    except Exception as e:
+        logger.error(f"Error generating PowerPoint presentation: {e}")
+        return dumps({"error": "An error occurred while generating the PowerPoint presentation."}, ensure_ascii=False)
+
+@mcp.tool(
+    name = "generate_excel",
+    title = "Generate Excel",
+    description = EXCEL_TEMPLATE
 )
-def generate_excel(request: Request, body: GenerateExcelRequest):
+async def generate_excel(
+    body: GenerateExcelRequest
+):
     """Generates an Excel workbook using a provided Python script."""
-    return _generate_excel(body.python_script, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    logger.info("Received request to generate Excel workbook")
+    try:
+        # headers
+        request = {"headers": get_http_headers()}
+        return _generate_excel(body.python_script, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    except Exception as e:
+        logger.error(f"Error generating Excel workbook: {e}")
+        return dumps({"error": "An error occurred while generating the Excel workbook."}, ensure_ascii=False)
 
-@app.post(
-    "/generate_markdown", 
-    summary="Generate Markdown", 
-    description=MARKDOWN_TEMPLATE,
-    operation_id="generate_markdown_document"
+@mcp.tool(
+    name = "generate_markdown",
+    title = "Generate Markdown",
+    description = MARKDOWN_TEMPLATE
 )
-def generate_markdown(request: Request, body: GenerateMarkdownRequest):
+async def generate_markdown(
+    body: GenerateMarkdownRequest
+):
     """Generates a Markdown document using a provided Python script."""
-    return _generate_markdown(body.python_script, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    logger.info("Received request to generate Markdown document")
+    try:
+        request = {"headers": get_http_headers()}
+        return _generate_markdown(body.python_script, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    except Exception as e:
+        logger.error(f"Error generating Markdown document: {e}")
+        return dumps({"error": "An error occurred while generating the Markdown document."}, ensure_ascii=False)
 
-@app.post(
-    "/generate_word", 
-    summary="Generate Word", 
-    description=WORD_TEMPLATE,
-    operation_id="generate_word_document"
+@mcp.tool(
+    name = "generate_word",
+    title = "Generate Word",
+    description = WORD_TEMPLATE
 )
-def generate_word(request: Request, body: DocxBodyElements):
+async def generate_word(
+    body: DocxBodyElements
+):
     """Generates a Word document using provided metadata and body elements."""
-    # Collect all elements (flatten nested dicts)
-    all_elements = []
-    raw_elements = []
-    raw_elements.extend(body.document_elements)
-    for e in raw_elements:
-        # print("Raw element:", e)
-        # print("type:", type(e))
-        # print("hasattr model_dump:", hasattr(e, 'model_dump'))
-        # if hasattr(e, 'model_dump'):
-        #     print("model_dump:", e.model_dump())
-        # aux_dict = {}
-        aux_dict = {}
-        aux_dict['index_element'] = e.index_element
-        aux_dict['type'] = e.type
-        if e.paragraph is not None:
-            aux_dict['text'] = e.paragraph.text
-        if e.header is not None:
-            aux_dict['text'] = e.header.text
-            aux_dict['level'] = e.header.level
-        if e.list_item is not None:
-            aux_dict['list_style'] = e.list_item.list_style
-            aux_dict['items'] = e.list_item.items
-        if e.table is not None:
-            aux_dict['table_headers'] = e.table.table_headers
-            aux_dict['table_rows'] = e.table.table_rows
-            aux_dict['caption'] = e.table.caption
-        if e.image is not None:
-            aux_dict['id'] = e.image.id
-            aux_dict['caption'] = e.image.caption
-        if e.equation is not None:
-            aux_dict['latex'] = e.equation.latex
-            aux_dict['caption'] = e.equation.caption
-        all_elements.append(aux_dict)
-        print("aux_dict:", aux_dict)
-        # Convert to dict if it's a model instance
-    #     if isinstance(e, dict):
-    #         elem_dict = e
-    #     else:
-    #         elem_dict = e.model_dump()
-        
-    #     flat_elem = {"index_element": elem_dict["index_element"], "type": elem_dict["type"]}
-    #     # Find the non-None subfield and merge its contents
-    #     if "paragraph" in elem_dict and elem_dict["paragraph"] is not None:
-    #         flat_elem.update(elem_dict["paragraph"])
-    #     elif "header" in elem_dict and elem_dict["header"] is not None:
-    #         flat_elem.update(elem_dict["header"])
-    #     elif "list_item" in elem_dict and elem_dict["list_item"] is not None:
-    #         flat_elem.update(elem_dict["list_item"])
-    #     elif "table" in elem_dict and elem_dict["table"] is not None:
-    #         flat_elem.update(elem_dict["table"])
-    #     elif "image" in elem_dict and elem_dict["image"] is not None:
-    #         flat_elem.update(elem_dict["image"])
-    #     elif "equation" in elem_dict and elem_dict["equation"] is not None:
-    #         flat_elem.update(elem_dict["equation"])
-    #     all_elements.append(flat_elem)
-    # all_elements.sort(key=lambda x: x["index_element"])
+    logger.info("Received request to generate Word document")
+    try:
+        # Collect all elements (flatten nested dicts)
+        all_elements = []
+        raw_elements = []
+        raw_elements.extend(body.document_elements)
+        for e in raw_elements:
 
-    # all_elements.extend(body.document_headers)
-    # all_elements.extend(body.document_lists)
-    # all_elements.extend(body.document_tables)
-    # all_elements.extend(body.document_images)
-    # all_elements.extend(body.document_equations)
-    
-    # # Check for long consecutive runs in each list
-    # lists_to_check = [
-    #     ("document_paragraphs", body.document_paragraphs),
-    #     ("document_headers", body.document_headers),
-    #     ("document_lists", body.document_lists),
-    #     ("document_tables", body.document_tables),
-    #     ("document_images", body.document_images),
-    #     ("document_equations", body.document_equations),
-    # ]
-    # for list_name, elements in lists_to_check:
-    #     if elements:
-    #         # check if the elements are not None before extracting index_element
-    #         indices = [e.index_element for e in elements if e is not None]
-    #         if has_long_consecutive_run(indices):
-    #             element_type = list_name.replace('document_', '').replace('_', ' ')
-    #             return {"error": {"message": f"Oops! Found more than 3 consecutive index_element values in {list_name}. This could result in pages or sections with only {element_type} (e.g., all headers or all paragraphs), which isn't varied or readable for humans. All elements are combined and sorted by index_element to build the document body in logical order, so space out the indices to mix content types."}}
-    
-    # # Check for duplicate index_element
-    # indexes = [elem.index_element for elem in all_elements]
-    # if len(indexes) != len(set(indexes)):
-    #     return {"error": {"message": "Oops! There are duplicate index_element values. Each element in document_paragraphs, document_headers, document_lists, document_tables, document_images, and document_equations must have a unique index_element (starting from 1, like 1, 2, 3, etc.). The document is built by sorting all these elements by their index_element in ascending order, which defines the logical order of the document body."}}
-    
-    # if not all_elements:
-    #     return {"error": {"message": "No document elements provided. Please include content in document_paragraphs, document_headers, or other lists."}}
-    
-    # # Sort by index_element
-    # all_elements.sort(key=lambda x: x.index_element)
-    
-    return _generate_word_from_template(body.document_cover, body.columns_body, all_elements, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+            aux_dict = {}
 
-@app.post(
-    "/list_docx_elements", 
-    summary="Return the structure of a docx document",
-    operation_id="list_docx_elements"
+            if e.paragraph is not None:
+                aux_dict['text'] = e.paragraph.text
+                aux_dict['type'] = "ParagraphBody"
+            if e.header is not None:
+                aux_dict['text'] = e.header.text
+                aux_dict['level'] = e.header.level
+                aux_dict['type'] = "ParagraphHeader"
+            if e.list_item is not None:
+                aux_dict['list_style'] = e.list_item.list_style
+                aux_dict['items'] = e.list_item.items
+                aux_dict['type'] = "ParagraphListItem"
+            if e.table is not None:
+                aux_dict['table_headers'] = e.table.table_headers
+                aux_dict['table_rows'] = e.table.table_rows
+                aux_dict['caption'] = e.table.caption
+                aux_dict['type'] = "Table"
+            if e.image is not None:
+                aux_dict['id'] = e.image.id
+                aux_dict['caption'] = e.image.caption
+                aux_dict['type'] = "Image"
+            if e.equation is not None:
+                aux_dict['latex'] = e.equation.latex
+                aux_dict['caption'] = e.equation.caption
+                aux_dict['type'] = "Equation"
+            all_elements.append(aux_dict)
+
+        # headers
+        request = {"headers": get_http_headers()}
+        return _generate_word_from_template(body.document_cover, body.columns_body, all_elements, body.file_name, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    except Exception as e:
+        logger.error(f"Error generating Word document: {e}")
+        return dumps({"error": "An error occurred while generating the Word document."}, ensure_ascii=False)
+
+@mcp.tool(
+    name = "list_docx_elements",
+    title = "List DOCX Elements",
+    description = "Return the DOCX structure with each element's index, style, and text to help identify target sections before adding comments with the review_docx tool."
 )
-def full_context_docx(request: Request, body: FullContextDocxRequest):
+async def full_context_docx(
+    body: FullContextDocxRequest
+):
     """Returns the structure of a DOCX document, including index, style, and text of each element."""
-    return _full_context_docx(body.file_id, body.file_name, request, OWUI_URL)
+    logger.info("Received request to list DOCX document elements")
+    try:
+        # headers
+        request = {"headers": get_http_headers()}
+        return _full_context_docx(body.file_id, body.file_name, request, OWUI_URL)
+    except Exception as e:
+        logger.error(f"Error listing DOCX document elements: {e}")
+        return dumps({"error": "An error occurred while listing the DOCX document elements."}, ensure_ascii=False)
 
-@app.post(
-    "/review_docx", 
-    summary="Review and comment on docx document",
-    operation_id="review_docx_document"
+@mcp.tool(
+    name = "review_docx",
+    title = "Review DOCX Document",
+    description = "Review an existing DOCX document and add targeted comments on selected sections to improve spelling, grammar, style, and clarity."
 )
-def review_docx(request: Request, body: ReviewDocxRequest):
+async def review_docx(
+    body: ReviewDocxRequest
+):
     """Reviews an existing DOCX document and adds comments to specific elements."""
-    return _review_docx(body.file_id, body.file_name, body.review_comments, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
+    logger.info("Received request to review DOCX document")
+    try:
+        # headers
+        request = {"headers": get_http_headers()}
+        return _review_docx(body.file_id, body.file_name, body.review_comments, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE, REVIEWER_AI_ASSISTANT_NAME)
+    except Exception as e:
+        logger.error(f"Error reviewing DOCX document: {e}")
+        return dumps({"error": "An error occurred while reviewing the DOCX document."}, ensure_ascii=False)
 
 # --- Main ---
 if __name__ == "__main__":
-    logger.info(ASCII_INFO)
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    logger.info(SERVER_BANNER)
+    mcp.run(transport="streamable-http", host='0.0.0.0', port=PORT, show_banner=False)
+
+    

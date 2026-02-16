@@ -1,8 +1,8 @@
-import logging
-logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
+from utils.logger import get_logger
 
 from importlib import resources
+
+logger = get_logger(__name__)
 
 def load_md_templates() -> tuple[str, str, str, str, str]:
     """

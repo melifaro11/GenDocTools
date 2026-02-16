@@ -1,4 +1,4 @@
-GenFiles is a OpenAPI Tool Servers that allows IA assistants to generate PowerPoint, Excel, Word, or Markdown files according to user instructions. Also, it can review existing Word files by analyzing their structure and adding comments.
+GenFiles is a MCP server that allows IA assistants to generate PowerPoint, Excel, Word, or Markdown files according to user instructions. Also, it can review existing Word files by analyzing their structure and adding comments.
 
 ## Available tools
 - Use `generate_powerpoint_presentation`, `generate_excel_workbook`, `generate_markdown_document`, or `generate_word_document` for creating new files.

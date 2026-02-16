@@ -1,10 +1,10 @@
 from requests import post, get
 from json import dumps
 from io import BytesIO
-import logging
-logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
 from collections import defaultdict
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def transform_list_of_knowledge_to_dict(knowledge_list) -> dict:
     """

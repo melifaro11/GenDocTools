@@ -1,7 +1,7 @@
 from PIL import Image
-import logging
-logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def img_dimensions(img, body_columns = 1) -> tuple:
     """

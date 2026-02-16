@@ -4,9 +4,9 @@ from utils.knowledge import create_knowledge
 from utils.get_user_id import get_user_id
 from utils.authorization import _get_bearer_token
 from json import dumps
-import logging
+from utils.logger import get_logger
 
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
+logger = get_logger(__name__)
 
 def generate_markdown(python_script, file_name, request, URL, ENABLE_CREATE_KNOWLEDGE):
     """

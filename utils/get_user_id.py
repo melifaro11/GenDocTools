@@ -3,6 +3,9 @@ Utility functions for retrieving user information from the server.
 """
 
 from requests import get
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_user_id(url: str, token: str) -> str | None:
@@ -33,14 +36,17 @@ def get_user_id(url: str, token: str) -> str | None:
     try:
         resp = get(endpoint, headers=headers, timeout=10)
     except Exception:
+        logger.error("=> Error retrieving user id.")
         return None
 
     if resp.status_code != 200:
+        logger.error(f"=> Error retrieving user id. Status code: {resp.status_code}")
         return None
 
     try:
         data = resp.json()
     except Exception:
+        logger.error("=> Error retrieving user id json decoding.")
         return None
 
     # Return the top-level 'id' if present, else None

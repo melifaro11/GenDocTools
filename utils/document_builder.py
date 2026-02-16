@@ -10,12 +10,26 @@ import numpy as np
 from utils.download_file import download_file
 from utils.authorization import _get_bearer_token
 from utils.img_dimensions import img_dimensions
-import logging
 import re
-logging.basicConfig(level=logging.INFO, force=True)
-logger = logging.getLogger("Gen Files OpenAPI Tool Server")
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def vertical_center(metadata_dict: dict, doc: Document) -> int:
+    """
+    Estimate how many empty lines are needed to vertically center cover metadata.
+
+    The function approximates text height using predefined font-size heuristics
+    and page margins from the first document section.
+
+    Args:
+        metadata_dict (dict): Cover metadata containing keys such as title,
+            subtitle, description, author, month, and year.
+        doc (Document): Target python-docx document used to read page metrics.
+
+    Returns:
+        int: Number of empty lines to insert before cover content.
+    """
     # Constantes
     EMU_INCH = 914400
     CHAR_WIDTH_FACTOR = 0.7  # Ancho promedio de cada carácter como fracción del tamaño de la fuente
@@ -62,10 +76,22 @@ def vertical_center(metadata_dict: dict, doc: Document) -> int:
     remaining_space = (useful_height - total_vertical_space_used) / 2
     empty_lines = np.ceil(remaining_space / (2 * DEFAULT_LINE_HEIGHT))  # Manteniendo la lógica original
 
-    logger.info(f"DOCX: Vertical centering calculated.")
+    logger.info(f"=> Vertical centering calculated.")
 
     return int(empty_lines)
 def parse_markdown_text(text):
+    """
+    Parse a text string with simple Markdown emphasis into styled segments.
+
+    Supports only `**bold**` and `*italic*` inline patterns.
+
+    Args:
+        text (str): Raw text that may contain Markdown emphasis.
+
+    Returns:
+        list[dict]: A sequence of segments with `text`, `bold`, and `italic`
+        flags, preserving input order.
+    """
     # Parse **bold** and *italic* in text
     # Split on ** and * patterns
     pattern = r'(\*\*.*?\*\*|\*.*?\*)'
@@ -81,7 +107,28 @@ def parse_markdown_text(text):
     return segments
 
 def build_docx_from_dict(doc_dict, buffer, request, URL):
-    logger.info("DOCX: Starting document generation ...")
+    """
+    Build a DOCX document from a normalized dictionary representation.
+
+    The function generates a cover, optional page break/columns, and body
+    elements (headers, paragraphs, lists, tables, images, and equations).
+    Images are downloaded using the request authorization header; when an image
+    cannot be loaded, a placeholder caption is inserted.
+
+    Args:
+        doc_dict (dict): Structured document definition with metadata and
+            sections.
+        buffer (BytesIO): Writable in-memory buffer where the DOCX is saved.
+        request: Incoming request object used to extract authorization.
+        URL (str): Base URL for file-download operations.
+
+    Returns:
+        BytesIO: The input buffer positioned at the beginning with DOCX content.
+
+    Raises:
+        ValueError: If a table element is missing required headers or rows.
+    """
+    logger.info("=> Starting document generation ...")
 
     metadata_data = doc_dict.get("metadata", {})
     sections_data = doc_dict.get("sections", [])
@@ -262,7 +309,7 @@ def build_docx_from_dict(doc_dict, buffer, request, URL):
         else:
             current_paragraph = None  # Reset for any other item
 
-    logger.info("DOCX: Document generation completed!")
+    logger.info("=> Document generation completed!")
     doc.save(buffer)
     buffer.seek(0)
     return buffer

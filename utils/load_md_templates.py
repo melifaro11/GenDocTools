@@ -4,7 +4,7 @@ from importlib import resources
 
 logger = get_logger(__name__)
 
-def load_md_templates() -> tuple[str, str, str, str, str]:
+def load_md_templates(word_element_filling: bool=False) -> tuple[str, str, str, str, str]:
     """
     Load Markdown templates for PowerPoint, Excel, Word, Markdown and MCP instructions.
 
@@ -21,8 +21,12 @@ def load_md_templates() -> tuple[str, str, str, str, str]:
         with resources.files("src").joinpath("excel.md").open("r", encoding="utf-8") as f:
             EXCEL_TEMPLATE = f.read()
 
-        with resources.files("src").joinpath("word_template.md").open("r", encoding="utf-8") as f:
-            WORD_TEMPLATE = f.read()
+        if word_element_filling:
+            with resources.files("src").joinpath("word_template.md").open("r", encoding="utf-8") as f:
+                WORD_TEMPLATE = f.read()
+        else:
+            with resources.files("src").joinpath("word.md").open("r", encoding="utf-8") as f:
+                WORD_TEMPLATE = f.read()
 
         with resources.files("src").joinpath("markdown.md").open("r", encoding="utf-8") as f:
             MARKDOWN_TEMPLATE = f.read()

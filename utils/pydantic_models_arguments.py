@@ -50,7 +50,7 @@ class ParagraphBody(BaseModel):
         ..., 
         description=(
             "Paragraph content. Markdown emphasis is allowed: **bold** and *italic*. "
-            "Paragraphs should have a maximum of 100 words and minimun 70 words. Line breaks can be created by adding \n."
+            "Paragraphs should have a maximum of 50 words and minimun 38. Line breaks can be created by adding. For consecutive paragraphs, use multiple 'ParagraphBody' elements in the 'DocumentElement' list, as combining multiple paragraphs into a single 'ParagraphBody' will result in poorly formatted output. "
             "Do not include titles in this field; use the type 'ParagraphHeader' for titles, as using 'ParagraphBody' for titles will result in poorly formatted output. "
             "If you need to create lists, use the type 'ParagraphListItem', as using 'ParagraphBody' for list items will result in poorly formatted output. "
             "Similarly, do not use 'ParagraphBody' for equations; use the type 'Equation' instead to ensure proper formatting."

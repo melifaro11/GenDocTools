@@ -197,3 +197,81 @@ def generate_word_from_template(doc_metadata, columns_body, doc_dict, file_name,
     except Exception as e:
         logger.error("=> An unknown error occurred during DOCX document generation.")
         return dumps({"error": {"message": str(e)}}, indent=4, ensure_ascii=False)
+
+def generate_word(python_script, file_name, images_list, ctx, URL, ENABLE_CREATE_KNOWLEDGE):
+    """
+    Generate a Word document using an AI-generated Python script.
+
+    Returns:
+        dict: Contains 'file_path_download' with a markdown hyperlink for downloading the generated Word file.
+    """
+    try:
+        images = [] # to save bytesIO images
+
+        if len(images_list) > 0:
+            logger.info(f"Received {len(images_list)} images for DOCX generation.")
+
+        # download images
+        for idx, image in enumerate(images_list):
+            image_file = download_file(URL, _get_bearer_token(ctx), image)
+            if isinstance(image_file, dict) and "error" in image_file:
+                return {"error": {"message": f"Error downloading image with ID {image}: {image_file['error']['message']}"}}
+            images.append(image_file)
+        
+        # Prepare the execution context with images
+        buffer = BytesIO()
+        buffer.name = f'{file_name}.docx'
+        context = {"docx_buffer": buffer, "images": images}
+        try:
+            exec(python_script, context)
+        except Exception as exec_e:
+            return {"error": {"message": f"Error executing script: {str(exec_e)}"}}
+
+        buffer.seek(0)
+
+        bearer_token = _get_bearer_token(ctx)
+        if bearer_token:
+            logger.info("Received authorization header")
+        else:
+            logger.debug("Authorization header not present")
+
+        user_id = get_user_id(URL, bearer_token)
+        if not user_id:
+            return dumps({"error": {"message": "Error obtaining user id from token"}}, indent=4, ensure_ascii=False)
+
+        response, request_data = upload_file(
+            url=URL, 
+            token=bearer_token, 
+            file_data=buffer,
+            filename=file_name,
+            file_type="docx"
+        )
+
+        if "file_path_download" in response and ENABLE_CREATE_KNOWLEDGE:
+            create_knowledge_status = create_knowledge(
+                url=URL,
+                token=bearer_token,
+                file_id=request_data['id'],
+                user_id=user_id
+            )
+            if create_knowledge_status:
+                logger.info("Knowledge base updated successfully.")
+            else:
+                logger.error("Error creating or updating knowledge base")
+        elif "error" in response:
+            logger.error("Error uploading the file.")
+        else:
+            logger.info("Skipping knowledge creation because ENABLE_CREATE_KNOWLEDGE is false")
+
+        return response 
+    
+    except Exception as e:
+        return dumps(
+            {
+                "error": {
+                    "message": str(e)
+                }
+            }, 
+            indent=4, 
+            ensure_ascii=False
+        )

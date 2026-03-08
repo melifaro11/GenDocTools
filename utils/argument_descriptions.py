@@ -21,7 +21,7 @@ try:
         }
     }
 
-    SERVER_VERSION = "v0.3.0-alpha.5 ⚡"
+    SERVER_VERSION = "v0.3.0-alpha.6⚡"
 
     SERVER_BANNER = f"""
     

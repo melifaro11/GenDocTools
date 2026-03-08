@@ -8,7 +8,15 @@ def _get_bearer_token(request):
     Returns the header value as a string, or None if not present.
     """
     try:
-        return request.get("headers").get("authorization")
+        headers = request.get("headers")
+
+        if isinstance(headers, str):
+            return headers.strip() or None
+
+        if isinstance(headers, dict):
+            auth_header = headers.get("authorization") or headers.get("Authorization")
+            if isinstance(auth_header, str):
+                return auth_header.strip() or None
     except Exception:
         # Log unexpected errors with stack trace for debugging.
         logger.exception("=> Unexpected error retrieving authorization header")

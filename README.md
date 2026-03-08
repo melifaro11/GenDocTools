@@ -38,9 +38,9 @@ GenFiles is an MCP Server that generates PowerPoint, Excel, Word, or Markdown fi
 
 ## Status
 
-This release is **v0.3.0-alpha.5** and was tested with Open Web UI v0.8.1: [Open Web UI GitHub Repository](https://github.com/open-webui/open-webui)
+This release is **v0.3.0-alpha.6** and was tested with Open Web UI v0.8.1: [Open Web UI GitHub Repository](https://github.com/open-webui/open-webui)
 
-**Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**. In recent versions of Open Web UI you could use GenFiles MCP Server v0.3.0-alpha.5 with limited functionality (without knowledge base integration) by setting `ENABLE_CREATE_KNOWLEDGE=false` 🚨 
+**Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**. In recent versions of Open Web UI you could use GenFiles MCP Server v0.3.0-alpha.6 with limited functionality (without knowledge base integration) by setting `ENABLE_CREATE_KNOWLEDGE=false` 🚨 
 
 **This MCP server requires Open Web UI v0.6.31 or later for native MCP support** 
 
@@ -50,7 +50,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 
 - **Docker** installed on your system
 - Administrators must enable "Knowledge Access" permission in Workspace Permissions for default or group user permissions
-- This alpha runs as an MCP Server using `streamable-http` transport.
+- This alpha runs as an MCP Server and supports `streamable-http` and `stdio` transports through `MCP_TRANSPORT`.
 
 ## Installation
 
@@ -59,7 +59,7 @@ The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated
 Pull the pre-built Docker image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.5
+docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.6
 ```
 
 Run the container:
@@ -71,13 +71,13 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.5
+  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.6
 ```
 
 One-line command (copy/paste):
 
 ```bash
-docker run -d --restart unless-stopped -p 8016:8016 -e OWUI_URL="http://host.docker.internal:3000" -e PORT=8016 -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" -e ENABLE_CREATE_KNOWLEDGE=false --name gen_files_mcp ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.5
+docker run -d --restart unless-stopped -p 8016:8016 -e OWUI_URL="http://host.docker.internal:3000" -e PORT=8016 -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" -e ENABLE_CREATE_KNOWLEDGE=false --name gen_files_mcp ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.6
 ```
 
 Alternatively, use the `:latest` tag for the most recent version:
@@ -187,6 +187,8 @@ The MCP Server requires the following environment variables:
 |----------|-------------|---------|
 | `OWUI_URL` | URL of your Open Web UI instance | `http://host.docker.internal:3000` |
 | `PORT` | Port where the MCP Server will listen | `8016` |
+| `MCP_TRANSPORT` | MCP transport used at startup. Use `streamable-http` for HTTP deployments such as Open WebUI external tools, or `stdio` for local MCP clients launched with `uvx`. | `streamable-http` |
+| `OWUI_API_KEY` | Optional API key used to authenticate directly against Open Web UI when no incoming HTTP authorization header is available. When defined, it takes precedence over forwarded request headers. | `` |
 | `REVIEWER_AI_ASSISTANT_NAME` | Default assistant name used when adding review comments in DOCX files. | `GenFilesMCP` |
 | `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are automatically added to users' knowledge collections. Set to `true` to enable automatic creation/updating of knowledge collections; set to `false` to disable that behavior. | `false` |
 
@@ -205,6 +207,36 @@ Configure the server in your Open Web UI "External Tools" settings using MCP (`s
 > Once Tools are enabled for your model, Open WebUI gives you two different ways to let your LLM use them in conversations. You can decide how the model should call Tools by choosing between: `Default Mode (Prompt-based)` or `Native Mode (Built-in function calling)`, check the documentation for more details: [OWUI Tools](https://docs.openwebui.com/features/extensibility/plugin/tools/)
 
 The recomended way to use the GenFiles MCP Server is with `Native Mode (Built-in function calling)` as it provides a more seamless experience and better integration with the LLM's capabilities.
+
+### Local MCP Configuration with uvx
+
+The repository now exposes a console command named `genfilesmcp`, so it can be launched directly from Git with `uvx`.
+
+The example below is pinned to the `v0.3.0-alpha.6` tag.
+
+Example configuration:
+
+```json
+{
+  "genfilesmcp-local": {
+    "command": "uvx",
+    "args": [
+      "--from",
+      "git+https://github.com/Baronco/GenFilesMCP.git@v0.3.0-alpha.6",
+      "genfilesmcp"
+    ],
+    "env": {
+      "MCP_TRANSPORT": "stdio",
+      "OWUI_URL": "http://localhost:3000",
+      "OWUI_API_KEY": "your_limited_api_key",
+      "ENABLE_CREATE_KNOWLEDGE": "false",
+      "REVIEWER_AI_ASSISTANT_NAME": "GenFilesMCP"
+    }
+  }
+}
+```
+
+Important: if `OWUI_API_KEY` is defined, GenFiles uses it as `Bearer <key>` for uploads and user resolution. If it is not defined, the server keeps the previous behavior and forwards the incoming MCP HTTP authorization header when available.
 
 ## Setup for Document Generation and Review Features
 
@@ -309,7 +341,7 @@ For optimal results, create a custom agent in Open Web UI:
 
 ### Example 1: Generating a DOCX file
 
-This new alpha version v0.3.0-alpha.5 includes improved DOCX generation capabilities for enhancing safety and robustness. Now AI assistants have to focus in the elements required for the document structure and not in the generation of the document using code blocks.
+This new alpha version v0.3.0-alpha.6 includes improved DOCX generation capabilities for enhancing safety and robustness. Now AI assistants have to focus in the elements required for the document structure and not in the generation of the document using code blocks.
 
 <p align="center">
   <img src="img/NewDocxGen.png" alt="Generating DOCX Example" />

@@ -155,33 +155,33 @@ def build_docx_from_dict(doc_dict, buffer, request, URL):
     # Aplicar metadata como portada centrada horizontalmente
     meta = metadata_data
     if "title" in meta:
-        title = doc.add_paragraph(meta["title"])
+        title = doc.add_paragraph(meta["title"].replace("*", ""))
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if title.runs:
             title.runs[0].bold = True
             title.runs[0].font.size = Inches(0.5)  # Tamaño grande para título
             title.runs[0].font.name = font  # Usar font global
     if "subtitle" in meta:
-        subtitle = doc.add_paragraph(meta["subtitle"])
+        subtitle = doc.add_paragraph(meta["subtitle"].replace("*", ""))
         subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if subtitle.runs:
             subtitle.runs[0].italic = True
             subtitle.runs[0].font.size = Inches(0.1667)  # Tamaño mediano para subtítulo
             subtitle.runs[0].font.name = font
     if "description" in meta:
-        desc = doc.add_paragraph(meta["description"])
+        desc = doc.add_paragraph(meta["description"].replace("*", ""))
         desc.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if desc.runs:
             desc.runs[0].font.size = Inches(0.1667)  
             desc.runs[0].font.name = font
     if "author" in meta:
-        author = doc.add_paragraph(f"Autor: {meta['author']}")
+        author = doc.add_paragraph(f"Autor: {meta['author'].replace('*','')}")
         author.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if author.runs:
             author.runs[0].font.size = Inches(0.1667)
             author.runs[0].font.name = font
     if "month" in meta and "year" in meta:
-        date = doc.add_paragraph(f"{meta['month']} {meta['year']}")
+        date = doc.add_paragraph(f"{meta['month'].replace("*", "")} {meta['year'].replace("*", "")}")
         date.alignment = WD_ALIGN_PARAGRAPH.CENTER
         if date.runs:
             date.runs[0].font.size = Inches(0.1667)
@@ -245,9 +245,14 @@ def build_docx_from_dict(doc_dict, buffer, request, URL):
         elif item_type == "ParagraphListItem" or "items" in item:  # ParagraphListItem
             current_paragraph = None  # Reset paragraph
             for it in item["items"]:
-                p = doc.add_paragraph(it, style='List Bullet' if item.get("list_style") == "List Bullet" else 'List Number')
-                if p.runs:
-                    p.runs[0].font.name = font
+                p = doc.add_paragraph(style='List Bullet' if item.get("list_style") == "List Bullet" else 'List Number')
+                segments = parse_markdown_text(it)
+                for seg in segments:
+                    run = p.add_run(seg['text'])
+                    run.bold = seg['bold']
+                    run.italic = seg['italic']
+                    run.font.size = Inches(12 / 72)
+                    run.font.name = font
         
         elif item_type == "Table" or "table_headers" in item:  # Table
             current_paragraph = None  # Reset paragraph

@@ -13,6 +13,7 @@ import uvicorn
 from utils.logger import configure_logging, get_logger
 configure_logging()
 from utils.load_md_templates import load_md_templates
+from utils.register_tools import register_word_tool
 from utils.argument_descriptions import SERVER_BANNER, MCP_SERVER_NAME, SERVER_VERSION, ARGUMENT_DESCRIPTIONS
 from utils.generate_word_template_body_check import generate_word_template_body_check
 from utils.pydantic_models_endpoints import (
@@ -142,25 +143,14 @@ async def generate_word(
     return _generate_word(python_script, file_name, images_list, request, OWUI_URL, ENABLE_CREATE_KNOWLEDGE)
 
 
-def register_word_tool() -> None:
-    if ENABLE_WORD_ELEMENT_FILLING:
-        mcp.tool(
-            name="generate_word_structured",
-            title="Generate Word",
-            description=WORD_TEMPLATE,
-        )(generate_word_structured)
-        logger.info("Registered Word tool: generate_word_structured")
-        return
-
-    mcp.tool(
-        name="generate_word",
-        title="Generate Word",
-        description=WORD_TEMPLATE,
-    )(generate_word)
-    logger.info("Registered Word tool: generate_word")
-
-
-register_word_tool()
+register_word_tool(
+    mcp=mcp,
+    logger=logger,
+    word_template=WORD_TEMPLATE,
+    enable_word_element_filling=ENABLE_WORD_ELEMENT_FILLING,
+    generate_word_structured=generate_word_structured,
+    generate_word=generate_word,
+)
 
 
 @mcp.tool(

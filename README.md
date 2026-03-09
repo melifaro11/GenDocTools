@@ -1,22 +1,28 @@
 # GenFiles MCP Server 🧩
 
-GenFiles is an MCP Server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This server executes Python templates to produce files, uploads them to an Open Web UI (OWUI) endpoint, and stores them in the user's personal knowledge base. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
+GenFiles is an MCP Server that generates PowerPoint, Excel, Word, or Markdown files from user requests and chat context. This server executes Python templates or structured document builders to produce files, uploads them to an Open Web UI (OWUI) endpoint, and can persist them in Open WebUI knowledge collections depending on the selected transport and configuration. Additionally, it supports analyzing and reviewing existing Word documents by extracting their structure and adding comments for corrections, grammar suggestions, or idea enhancements.
 
 ## Table of Contents
 
 - [Features](#features)
-- [Status](#status)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-  - [Option 1: Using Pre-built Docker Image (Recommended)](#option-1-using-pre-built-docker-image-recommended)
-  - [Option 2: Building from Source](#option-2-building-from-source)
-  - [Option 3: Docker Compose](#option-3-docker-compose)
-- [Configuration](#configuration)
-  - [Environment Variables](#environment-variables)
+- [Status / Compatibility](#status--compatibility)
+- [Choose Your Deployment Mode](#choose-your-deployment-mode)
+- [Direct streamable-http](#direct-streamable-http)
+  - [Deployment Prerequisites](#deployment-prerequisites)
+  - [Installation](#installation)
+  - [Open WebUI API Configuration](#open-webui-api-configuration)
   - [MCP Server Configuration in Open Web UI](#mcp-server-configuration-in-open-web-ui)
-- [Setup for Document Generation and Review Features](#setup-for-document-generation-and-review-features)
+- [stdio through MCPO](#stdio-through-mcpo)
+  - [Open WebUI API Restrictions](#open-webui-api-restrictions)
+  - [MCPO Configuration with Config JSON](#mcpo-configuration-with-config-json)
+  - [MCP Server Configuration in Open Web UI for stdio through MCPO](#mcp-server-configuration-in-open-web-ui-for-stdio-through-mcpo)
+- [Shared Open WebUI Requirements](#shared-open-webui-requirements)
+  - [Environment Variables](#environment-variables)
   - [Knowledge Base and Permissions](#knowledge-base-and-permissions)
   - [MCP Server Document Upload Settings](#mcp-server-document-upload-settings)
+- [Document Generation and Review Setup](#document-generation-and-review-setup)
+  - [Feature Prerequisites](#feature-prerequisites)
+  - [Creating the Chat Context Tool](#creating-the-chat-context-tool)
   - [System Prompt for your AI Assistant](#system-prompt-for-your-ai-assistant)
 - [Usage Examples](#usage-examples)
   - [Example 1: Generating a DOCX file](#example-1-generating-a-docx-file)
@@ -29,39 +35,52 @@ GenFiles is an MCP Server that generates PowerPoint, Excel, Word, or Markdown fi
 
 - **File Generation**: Creates files in multiple formats (PowerPoint, Excel, Word, Markdown) from user requests.
 - **MCP Server**: Exposes tools via the Model Context Protocol for seamless integration with LLMs.
+- **MCPO Support**: Can run behind [mcpo](https://github.com/open-webui/mcpo), allowing teams to reuse an existing MCPO deployment instead of running GenFilesMCP as another standalone container or web app.
 - **Python Templates**: Uses customizable Python templates to generate files with specific structures.
-- **OWUI Integration**: Automatically uploads generated files to Open Web UI's file API (`/api/v1/files/`) and (`/api/v1/knowledge/`).
+- **OWUI Integration**: Automatically uploads generated files to Open Web UI's file API (`/api/v1/files/`) and uses the knowledge APIs (`/api/v1/knowledge/search`, `/api/v1/knowledge/create`, `/api/v1/knowledge/{id}/file/add`) when knowledge persistence is enabled.
 - **Document Review**: Analyzes existing Word documents and adds structured comments for corrections, grammar suggestions, or idea enhancements.
 - **Image Embedding**: Supports embedding images from chat uploads directly into generated Word documents.
-- **Knowledge Base Integration**: Generated and reviewed documents are automatically stored in the user's personal knowledge base, allowing easy access, download, and deletion.
-- **Multi-User Support**: Designed for environments with multiple users, with user-specific document collections.
+- **Knowledge Base Integration**: Generated and reviewed documents can be stored in Open Web UI knowledge collections for later access, download, deletion, and reuse from other chats.
+- **Multi-User Support**: Designed for environments with multiple users, supporting per-user or group-oriented document access patterns depending on the selected deployment mode.
 
-## Status
+## Status / Compatibility
 
-This release is **v0.3.0-alpha.8** and was tested with Open Web UI v0.8.1: [Open Web UI GitHub Repository](https://github.com/open-webui/open-webui)
+This release is **v0.3.0-alpha.10** and was tested with Open Web UI v0.8.8: [Open Web UI GitHub Repository](https://github.com/open-webui/open-webui)
 
-**Important compatibility note:** this alpha requires **Open Web UI v0.6.42 or later** (the knowledge API changed to a paginated `/api/v1/knowledge/search` endpoint). For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**. In recent versions of Open Web UI you could use GenFiles MCP Server v0.3.0-alpha.8 with limited functionality (without knowledge base integration) by setting `ENABLE_CREATE_KNOWLEDGE=false` 🚨 
-
-**This MCP server requires Open Web UI v0.6.31 or later for native MCP support** 
+**Important compatibility note:** native MCP support appeared in **Open Web UI v0.6.31**, and the paginated knowledge API used by this alpha arrived in **v0.6.42**, but Open Web UI has changed significantly since then. For this release, the recommended minimum is **Open Web UI v0.8.8**. For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**.
 
 The `ENABLE_CREATE_KNOWLEDGE` variable lets deployments choose whether generated or reviewed files are automatically added to users' knowledge collections. The original behavior (downloading files from chats) remains unchanged for end users.
 
-The base knowledge collection name is controlled by `KNOWLEDGE_COLLECTION_NAME` in both `streamable-http` and `stdio` modes.
+The base knowledge collection name is controlled by `KNOWLEDGE_COLLECTION_NAME` in both `streamable-http` and `stdio` modes, and generated and reviewed files are stored in that same collection when knowledge persistence is enabled.
 
-## Prerequisites
+`OWUI_API_KEY` is intended only for `stdio` deployments served through MCPO. In `stdio` through MCPO, `ENABLE_CREATE_KNOWLEDGE=true` is **mandatory** because that is the mechanism that makes generated or reviewed files available to end users through group-based knowledge sharing in Open Web UI.
+
+## Choose Your Deployment Mode
+
+Choose one of these two supported deployment patterns before you start configuring Open Web UI:
+
+- **Direct streamable-http**: Recommended for single-user setups, whether local or cloud-hosted, when it is not a problem to deploy GenFilesMCP as its own HTTP web app or container.
+- **stdio through MCPO**: Recommended when you already have [mcpo](https://github.com/open-webui/mcpo) deployed and want to reuse that same web app instead of deploying GenFilesMCP as another dedicated HTTP service. This is especially useful for multi-user environments.
+
+The sections below keep the same technical details as before, but grouped first by deployment mode and then by shared Open Web UI requirements.
+
+## Direct streamable-http
+
+Use this mode when GenFilesMCP will run as its own HTTP MCP server and Open Web UI can call it directly.
+
+### Deployment Prerequisites
 
 - **Docker** installed on your system
-- Administrators must enable "Knowledge Access" permission in Workspace Permissions for default or group user permissions
-- This alpha runs as an MCP Server and supports `streamable-http` and `stdio` transports through `MCP_TRANSPORT`.
+- This mode runs GenFilesMCP as a dedicated HTTP service with `MCP_TRANSPORT=streamable-http`.
 
-## Installation
+### Installation
 
 ### Option 1: Using Pre-built Docker Image (Recommended)
 
 Pull the pre-built Docker image from GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.8
+docker pull ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.10
 ```
 
 Run the container:
@@ -70,17 +89,16 @@ Run the container:
 docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e OWUI_URL="http://host.docker.internal:3000" \
   -e PORT=YOUR_PORT \
-  -e KNOWLEDGE_COLLECTION_NAME="My Generated Files" \
   -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
-  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.8
+  ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.10
 ```
 
 One-line command (copy/paste):
 
 ```bash
-docker run -d --restart unless-stopped -p 8016:8016 -e OWUI_URL="http://host.docker.internal:3000" -e PORT=8016 -e KNOWLEDGE_COLLECTION_NAME="My Generated Files" -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" -e ENABLE_CREATE_KNOWLEDGE=false --name gen_files_mcp ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.8
+docker run -d --restart unless-stopped -p 8016:8016 -e OWUI_URL="http://host.docker.internal:3000" -e PORT=8016 -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" -e ENABLE_CREATE_KNOWLEDGE=false --name gen_files_mcp ghcr.io/baronco/genfilesmcp:v0.3.0-alpha.10
 ```
 
 Alternatively, use the `:latest` tag for the most recent version:
@@ -89,7 +107,6 @@ Alternatively, use the `:latest` tag for the most recent version:
 docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
   -e OWUI_URL="http://host.docker.internal:3000" \
   -e PORT=YOUR_PORT \
-  -e KNOWLEDGE_COLLECTION_NAME="My Generated Files" \
   -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
@@ -99,8 +116,10 @@ docker run -d --restart unless-stopped -p YOUR_PORT:YOUR_PORT \
 One-line command (copy/paste):
 
 ```bash
-docker run -d --restart unless-stopped -p 8016:8016 -e OWUI_URL="http://host.docker.internal:3000" -e PORT=8016 -e KNOWLEDGE_COLLECTION_NAME="My Generated Files" -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" -e ENABLE_CREATE_KNOWLEDGE=false --name gen_files_mcp ghcr.io/baronco/genfilesmcp:latest
+docker run -d --restart unless-stopped -p 8016:8016 -e OWUI_URL="http://host.docker.internal:3000" -e PORT=8016 -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" -e ENABLE_CREATE_KNOWLEDGE=false --name gen_files_mcp ghcr.io/baronco/genfilesmcp:latest
 ```
+
+These minimal examples keep knowledge persistence disabled. Add `KNOWLEDGE_COLLECTION_NAME` only if you change `ENABLE_CREATE_KNOWLEDGE` to `true`.
 
 ### Option 2: Building from Source
 
@@ -126,7 +145,6 @@ docker run -d --restart unless-stopped \
   -p YOUR_PORT:YOUR_PORT \
   -e OWUI_URL="http://host.docker.internal:3000" \
   -e PORT=YOUR_PORT \
-  -e KNOWLEDGE_COLLECTION_NAME="My Generated Files" \
   -e REVIEWER_AI_ASSISTANT_NAME="GenFilesMCP" \
   -e ENABLE_CREATE_KNOWLEDGE=false \
   --name gen_files_mcp \
@@ -156,7 +174,6 @@ services:
       dockerfile: Dockerfile
     container_name: gen_files_mcp
     environment:
-      - KNOWLEDGE_COLLECTION_NAME=My Generated Files
       - REVIEWER_AI_ASSISTANT_NAME=GenFilesMCP
       - ENABLE_CREATE_KNOWLEDGE=false
       - OWUI_URL=http://open-webui:8080
@@ -171,7 +188,6 @@ services:
     image: ghcr.io/baronco/genfilesmcp:latest
     container_name: gen_files_mcp
     environment:
-      - KNOWLEDGE_COLLECTION_NAME=My Generated Files
       - REVIEWER_AI_ASSISTANT_NAME=GenFilesMCP
       - ENABLE_CREATE_KNOWLEDGE=false
       - OWUI_URL=http://open-webui:8080
@@ -184,25 +200,22 @@ Finally, run the Docker Compose setup:
 docker compose up -d
 ```
 
-## Configuration
+### Open WebUI API Configuration
 
-### Environment Variables
-
-The MCP Server requires the following environment variables:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `OWUI_URL` | URL of your Open Web UI instance | `http://host.docker.internal:3000` |
-| `PORT` | Port where the MCP Server will listen | `8016` |
-| `MCP_TRANSPORT` | MCP transport used at startup. Use `streamable-http` for HTTP deployments such as Open WebUI external tools, or `stdio` for local MCP clients launched with `uvx`. | `streamable-http` |
-| `OWUI_API_KEY` | Optional API key used to authenticate directly against Open Web UI when no incoming HTTP authorization header is available. When defined, it takes precedence over forwarded request headers. | `` |
-| `KNOWLEDGE_COLLECTION_NAME` | Base name for the Open WebUI knowledge collection created for generated files. This value is also used as the base name for reviewed DOCX collections. | `My Generated Files` |
-| `REVIEWER_AI_ASSISTANT_NAME` | Default assistant name used when adding review comments in DOCX files. For reviewed DOCX knowledge collections, the final collection name becomes `{KNOWLEDGE_COLLECTION_NAME} Reviewed by {REVIEWER_AI_ASSISTANT_NAME}`. | `GenFilesMCP` |
-| `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are automatically added to users' knowledge collections. Set to `true` to enable automatic creation/updating of knowledge collections; set to `false` to disable that behavior. | `false` |
+- Set `JWT Expiration` to a finite duration such as `4h`. Do not leave it at `-1`.
+- With a finite expiration, Open WebUI forwards the active session bearer token when the assistant calls the tool.
+- That forwarded token lets GenFilesMCP work on behalf of the active user: upload generated files, download uploaded images or DOCX files, review documents, upload the reviewed document again, and return a download link the same user can open from the chat.
+- In direct `streamable-http` mode, if `ENABLE_CREATE_KNOWLEDGE=true`, GenFilesMCP can create or update the active user's knowledge collection named `KNOWLEDGE_COLLECTION_NAME`, so manual collection creation is not required.
+- In direct `streamable-http` mode, knowledge collections are optional. `ENABLE_CREATE_KNOWLEDGE=false` is supported.
+- If `ENABLE_CREATE_KNOWLEDGE=false`, `KNOWLEDGE_COLLECTION_NAME` is ignored.
+- Users who should access knowledge collections in direct `streamable-http` mode must have `Workspace Permissions -> Knowledge Access` enabled through default permissions or the relevant Open WebUI group.
+- `OWUI_API_KEY` is not needed in direct `streamable-http` mode.
 
 ### MCP Server Configuration in Open Web UI
 
-**Important:** This alpha release requires **Open Web UI version v0.6.42 or later** for native support due to a change in the knowledge API (now `/api/v1/knowledge/search`, paginated). For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**.
+This section applies to direct `streamable-http` deployments.
+
+**Important:** native MCP support appeared in **Open Web UI v0.6.31** and the paginated knowledge API used by this alpha arrived in **v0.6.42**, but because Open Web UI has changed significantly, the recommended minimum for this release is **v0.8.8**. For Open Web UI versions earlier than v0.6.42, use previous GenFiles releases **<= 0.2.2**.
 
 Configure the server in your Open Web UI "External Tools" settings using MCP (`streamable-http`) and set:
 
@@ -214,48 +227,224 @@ Configure the server in your Open Web UI "External Tools" settings using MCP (`s
 
 > Once Tools are enabled for your model, Open WebUI gives you two different ways to let your LLM use them in conversations. You can decide how the model should call Tools by choosing between: `Default Mode (Prompt-based)` or `Native Mode (Built-in function calling)`, check the documentation for more details: [OWUI Tools](https://docs.openwebui.com/features/extensibility/plugin/tools/)
 
-The recomended way to use the GenFiles MCP Server is with `Native Mode (Built-in function calling)` as it provides a more seamless experience and better integration with the LLM's capabilities.
+The recommended way to use the GenFiles MCP Server is with `Native Mode (Built-in function calling)` as it provides a more seamless experience and better integration with the LLM's capabilities.
 
-### Local MCP Configuration with uvx
+## stdio through MCPO
 
-The repository now exposes a console command named `genfilesmcp`, so it can be launched directly from Git with `uvx`.
+Use this mode when MCPO is already installed and running, and you want GenFilesMCP to be one more MCP entry inside that deployment instead of a separate HTTP service.
 
-The example below is pinned to the `v0.3.0-alpha.8` tag.
+### Open WebUI API Restrictions
 
-Example configuration:
+- Enable `Enable API Keys`.
+- Enable `API Key Endpoint Restrictions`.
+- Allow only these Open WebUI API base paths:
+  - `/api/v1/auths`
+  - `/api/v1/files`
+  - `/api/v1/knowledge`
+  - `/api/v1/knowledge/search`
+- Copy/paste value:
+
+```text
+/api/v1/auths, /api/v1/files, /api/v1/knowledge, /api/v1/knowledge/search
+```
+- These restrictions keep the service account limited to the Open WebUI API surface GenFilesMCP needs.
+- Open WebUI cannot forward each end-user session through the full `Open WebUI -> MCPO -> stdio MCP` chain, so GenFilesMCP must use `OWUI_API_KEY` from a dedicated Open WebUI service user.
+- In `stdio` through MCPO, `ENABLE_CREATE_KNOWLEDGE=true` is mandatory. Without group-shared knowledge collections, generated or reviewed documents will not be exposed for download to end users in the intended MCPO workflow.
+
+
+<p align="center">
+  <img src="img/apiconfiguration.png" alt="API Configuration" />
+</p>
+
+### MCPO Configuration with Config JSON
+
+[mcpo](https://github.com/open-webui/mcpo) can proxy `stdio` MCP servers from a Claude Desktop-style `config.json`, so you can expose GenFilesMCP through an existing MCPO deployment instead of deploying another standalone GenFilesMCP HTTP service.
+
+This mode is mainly intended for multi-user environments. If you are the only user on a local machine, direct `streamable-http` mode with the published Docker image is usually simpler.
+
+#### Required Open WebUI service user setup
+
+1. Create a dedicated Open WebUI user for GenFilesMCP, for example `GenFilesMCP`, with role `admin`.
+2. Create a dedicated group that contains only this service user, for example `GenFiles MCP`.
+
+<p align="center">
+  <img src="img/GenFilesMCP Group.png" alt="GenFilesMCP Group" />
+</p>
+
+3. In that dedicated group, enable `Workspace Permissions -> Knowledge Access`.
+4. In that dedicated group, enable `Sharing Permissions -> Knowledge Sharing`.
+5. In that dedicated group, enable `Features Permissions -> API Keys`.
+6. Sign in as `GenFilesMCP`, open `Settings -> Account -> API Keys`, click `Show`, and copy the key. Use that value as `OWUI_API_KEY`.
+
+<p align="center">
+  <img src="img/api_key.png" alt="API Key" />
+</p>
+
+#### Required end-user group model
+
+1. Create one Open WebUI group per organization unit or access boundary, such as `Development`, `Marketing`, or `Engineering`, `Team 1`, `Team 2`, etc.
+
+<p align="center">
+  <img src="img/teams.png" alt="Teams Group" />
+</p>
+
+2. In each of those groups, enable `Workspace Permissions -> Knowledge Access`.
+3. Add the `GenFilesMCP` service user to every group that should receive generated or reviewed documents through GenFilesMCP.
+
+
+<p align="center">
+  <img src="img/team1.png.png" alt="Team 1 Group" />
+</p>
+
+
+4. This MCPO + `stdio` pattern is aimed at multi-user deployments that already depend on MCPO.
+
+#### Rules for this mode
+
+- `OWUI_API_KEY` is used only in `stdio` through MCPO.
+- `ENABLE_CREATE_KNOWLEDGE` must be `true`.
+- One MCPO server entry is needed per target group or target shared collection.
+- If you want to test the experimental structured Word mode, add `ENABLE_WORD_ELEMENT_FILLING=true` to the selected entry.
+
+Example `config.json`:
 
 ```json
 {
-  "genfilesmcp-local": {
-    "command": "uvx",
-    "args": [
-      "--from",
-      "git+https://github.com/Baronco/GenFilesMCP.git@v0.3.0-alpha.8",
-      "genfilesmcp"
-    ],
-    "env": {
-      "MCP_TRANSPORT": "stdio",
-      "OWUI_URL": "http://localhost:3000",
-      "OWUI_API_KEY": "your_limited_api_key",
-      "ENABLE_CREATE_KNOWLEDGE": "false",
-      "KNOWLEDGE_COLLECTION_NAME": "My Generated Files",
-      "REVIEWER_AI_ASSISTANT_NAME": "GenFilesMCP"
+  "mcpServers": {
+    "genfilesmcp-team1": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Baronco/GenFilesMCP.git@v0.3.0-alpha.10",
+        "genfilesmcp"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "OWUI_URL": "http://host.docker.internal:3000",
+        "OWUI_API_KEY": "sk-xxxxxxxxxxxxxxxx",
+        "ENABLE_CREATE_KNOWLEDGE": "true",
+        "KNOWLEDGE_COLLECTION_NAME": "Team 1",
+        "REVIEWER_AI_ASSISTANT_NAME": "GenFilesMCP"
+      }
+    },
+    "genfilesmcp-team2": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/Baronco/GenFilesMCP.git@v0.3.0-alpha.10",
+        "genfilesmcp"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "OWUI_URL": "http://host.docker.internal:3000",
+        "OWUI_API_KEY": "sk-yyyyyyyyyyyyyyyy",
+        "ENABLE_CREATE_KNOWLEDGE": "true",
+        "KNOWLEDGE_COLLECTION_NAME": "Team 2",
+        "REVIEWER_AI_ASSISTANT_NAME": "GenFilesMCP"
+      }
     }
   }
 }
 ```
 
-Important: if `OWUI_API_KEY` is defined, GenFiles uses it as `Bearer <key>` for uploads and user resolution. If it is not defined, the server keeps the previous behavior and forwards the incoming MCP HTTP authorization header when available.
+This mode is unusable with `ENABLE_CREATE_KNOWLEDGE=false`. In `stdio` through MCPO, knowledge creation and sharing are the mechanism that exposes generated or reviewed files to end users, so setting this value to `false` makes the tool impractical for real use.
 
-## Setup for Document Generation and Review Features
+#### Final setup after editing `config.json`
+
+This manual preparation step is specific to `stdio` through MCPO. In direct `streamable-http`, if `ENABLE_CREATE_KNOWLEDGE=true`, GenFilesMCP can create the collection automatically for the active user session. In `stdio`, Open Web UI cannot forward each end-user session through the `Open WebUI -> MCPO -> stdio MCP` chain, so the collection must exist first under the `GenFilesMCP` service user so you can assign the matching user groups.
+
+1. Restart MCPO.
+2. Sign in again as `GenFilesMCP`.
+3. Go to `Workspace -> Knowledge`.
+4. In `stdio` through MCPO, create one knowledge collection manually per deployed GenFilesMCP tool, using the exact value of `KNOWLEDGE_COLLECTION_NAME`.
+
+<p align="center">
+  <img src="img/kb.png" alt="Knowledge Base" />
+</p>
+
+5. In the example above, create the collections `Team 1` and `Team 2`.
+
+6. For each collection, click `Add Access` and grant only the matching user group.
+
+<p align="center">
+  <img src="img/kb_team1_access_control.png" alt="Team 1 Knowledge Base Access Control" />
+</p>
+
+7. Verify that the `GenFilesMCP` service user belongs to every group associated with one of those collections.
+
+
+#### MCP Server Configuration in Open Web UI for stdio through MCPO
+
+In `stdio` through MCPO, you do not register GenFilesMCP directly in Open Web UI as a native MCP `streamable-http` server. Instead, MCPO reads the `config.json` entry, launches the `stdio` MCP server, and exposes an HTTP/OpenAPI endpoint for that entry.
+
+Make sure your `config.json` is correctly set up and that MCPO is running. Then, in Open Web UI `External Tools`, register the MCPO endpoint using `OpenApi` type and set:
+
+> URL "http://host.docker.internal:8000/genfilesmcp-team1"
+
+<p align="center">
+  <img src="img/mcpconection_stdio.png" alt="MCPO stdio Connection" />
+</p>
+
+Once that is done, Open Web UI will call the MCPO endpoint, and MCPO will proxy those requests to the corresponding `stdio` GenFilesMCP entry.
+
+## Shared Open WebUI Requirements
+
+These requirements apply across deployments, even though the operational flow differs between direct `streamable-http` and `stdio` through MCPO.
+
+### Environment Variables
+
+The MCP Server requires the following environment variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OWUI_URL` | URL of your Open Web UI instance | `http://host.docker.internal:3000` |
+| `PORT` | Port where the MCP Server will listen | `8016` |
+| `MCP_TRANSPORT` | MCP transport used at startup. Use `streamable-http` for direct HTTP deployments such as Open WebUI external tools, or `stdio` when the server is launched by MCPO or another stdio-capable MCP client. | `streamable-http` |
+| `OWUI_API_KEY` | API key used only for `stdio` deployments through MCPO, where Open WebUI cannot forward the active user's bearer token through the `Open WebUI -> MCPO -> stdio MCP` chain. Do not use it for direct `streamable-http` deployments. | `` |
+| `KNOWLEDGE_COLLECTION_NAME` | Name of the Open WebUI knowledge collection used for generated and reviewed files when `ENABLE_CREATE_KNOWLEDGE=true`. | `My Generated Files` |
+| `REVIEWER_AI_ASSISTANT_NAME` | Author name used inside Word comments created by `review_docx`. | `GenFilesMCP` |
+| `ENABLE_CREATE_KNOWLEDGE` | Controls whether generated or reviewed files are attached to Open WebUI knowledge collections. In direct `streamable-http` mode this is optional. In `stdio` through MCPO it must be `true`. | `false` |
+| `ENABLE_WORD_ELEMENT_FILLING` | Experimental DOCX mode. `false` keeps the code-generation flow; `true` switches to the structured element-based builder. | `false` |
+
+### Knowledge Base and Permissions
+
+This version integrates with Open Web UI's knowledge base system:
+
+- **Permission Requirement**: Administrators must enable `Workspace Permissions -> Knowledge Access` for the users who should access knowledge collections, either through `Default permissions` or through the relevant Open WebUI group.
+
+<p align="center">
+  <img src="img/permissions.png" alt="Knowledge Access Permission" />
+</p>
+
+- **Direct `streamable-http` mode**: If `ENABLE_CREATE_KNOWLEDGE=true`, GenFilesMCP can create or update a per-user knowledge collection named `KNOWLEDGE_COLLECTION_NAME` for the active user session, so manual collection creation is not required in direct `streamable-http` mode. The users who should see the collection still need `Knowledge Access` enabled.
+- **`stdio` through MCPO**: The recommended pattern is one deployed GenFilesMCP entry per group and one shared knowledge collection per deployed entry, with access granted through Open WebUI groups. In `stdio` through MCPO, create the collections manually first while signed in as `GenFilesMCP`, then grant the matching end-user groups in `Add Access`.
+- **Why `stdio` is different**: Open Web UI cannot forward each end-user session through the `Open WebUI -> MCPO -> stdio MCP` chain, so GenFilesMCP operates through the shared service user and depends on pre-created shared collections plus group access control.
+- **Single collection behavior**: Generated and reviewed files are stored in the same knowledge collection. `REVIEWER_AI_ASSISTANT_NAME` only affects the author name of DOCX comments.
+- **Document Management**: Users can easily review, access, download, and delete their generated or reviewed documents from their allowed knowledge collections. Deleting a document from a knowledge collection also removes it from the chats where it was generated.
+
+<p align="center">
+  <img src="img/knowledge.png" alt="Knowledge Base Integration" />
+</p>
+
+### MCP Server Document Upload Settings
+
+Behavior summary:
+- If `ENABLE_CREATE_KNOWLEDGE=false`: The MCP Server will NOT create or update knowledge collections for generated/reviewed files, and `KNOWLEDGE_COLLECTION_NAME` is ignored. This is supported in direct `streamable-http` mode, but it is not a valid MCPO + `stdio` setup.
+- If `ENABLE_CREATE_KNOWLEDGE=true`: The MCP Server will create or update the knowledge collection named `KNOWLEDGE_COLLECTION_NAME`.
+
+Collection naming summary:
+- Generated files use `KNOWLEDGE_COLLECTION_NAME`.
+- Reviewed DOCX files use the same `KNOWLEDGE_COLLECTION_NAME` collection.
+
+## Document Generation and Review Setup
 
 These features require additional setup in Open Web UI:
 
-### Prerequisites
+### Feature Prerequisites
 
 1. Create a mandatory custom tool called `chat_context` in Open Web UI to retrieve file metadata
 
-### Creating the chat_context Tool
+### Creating the Chat Context Tool
 
 1. In Open Web UI, go to **Workspace > Tools > (+) Create**
 2. Paste the following code:
@@ -277,7 +466,6 @@ class Tools:
         """
         Get files metadata and get the user Email and user ID from the user object.
         """
-        print(f"__metadata__ \n\n{__metadata__}")
         # id and name of current files
         chat_context = {"files": [], "attached_images": []}
 
@@ -312,36 +500,7 @@ class Tools:
 
 **Note:** This tool is mandatory for the correct functioning of document generation and review features, as it provides the necessary chat context, including file metadata and attached images.
 
-### Knowledge Base and Permissions
-
-This version integrates with Open Web UI's knowledge base system:
-
-- **Permission Requirement**: Administrators must enable the "Knowledge Access" permission in Workspace Permissions for default or group user permissions: -> Admin Panel -> Users -> Groups -> Default permissions (or other Group). 
-
-<p align="center">
-  <img src="img/permissions.png" alt="Knowledge Access Permission" />
-</p>
-
-- **User Collections**: Each user will have two dedicated knowledge collections created automatically:
-  - `KNOWLEDGE_COLLECTION_NAME` (default: "My Generated Files"): Contains generated documents.
-  - `{KNOWLEDGE_COLLECTION_NAME} Reviewed by {REVIEWER_AI_ASSISTANT_NAME}`: Contains reviewed Word documents.
-- **Document Management**: Users can easily review, access, download, and delete their generated or reviewed documents from their knowledge base. Deleting a document from the knowledge base also removes it from the chats where it was generated.
-
-<p align="center">
-  <img src="img/knowledge.png" alt="Knowledge Base Integration" />
-</p>
-
-### MCP Server Document Upload Settings
-
-Behavior summary:
-- If `ENABLE_CREATE_KNOWLEDGE=false`: The MCP Server will NOT create or update knowledge collections for generated/reviewed files. 
-- If `ENABLE_CREATE_KNOWLEDGE=true`: The MCP Server will create/update per-user knowledge collections for generated/reviewed files.
-
-Collection naming summary:
-- Generated files use `KNOWLEDGE_COLLECTION_NAME`.
-- Reviewed DOCX files use the same base name and append `Reviewed by {REVIEWER_AI_ASSISTANT_NAME}`.
-
-## System Prompt for your AI Assistant
+### System Prompt for your AI Assistant
 
 For optimal results, create a custom agent in Open Web UI:
 
@@ -354,7 +513,9 @@ For optimal results, create a custom agent in Open Web UI:
 
 ### Example 1: Generating a DOCX file
 
-This new alpha version v0.3.0-alpha.8 includes improved DOCX generation capabilities for enhancing safety and robustness. Now AI assistants have to focus in the elements required for the document structure and not in the generation of the document using code blocks.
+> **Word generation modes:** `ENABLE_WORD_ELEMENT_FILLING=false` is the default mode. In this mode the LLM writes Python code and the backend executes it to generate the DOCX. This default mode supports images uploaded in the chat. `ENABLE_WORD_ELEMENT_FILLING=true` is an experimental structured mode where the model decides the logical order of document elements and their content while the backend builds the DOCX from a template instead of executing generated code. This experimental mode aims to replace code generation over time, but not all models perform well yet. The `Results Summary 📊` benchmark below gives a practical idea of which tested models performed best in this mode.
+
+This alpha version includes both DOCX generation approaches. The examples below show the kind of output GenFilesMCP can produce in practice.
 
 <p align="center">
   <img src="img/NewDocxGen.png" alt="Generating DOCX Example" />

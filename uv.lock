@@ -473,7 +473,7 @@ wheels = [
 
 [[package]]
 name = "genfilesmcp"
-version = "0.3.0a6"
+version = "0.3.0a10"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

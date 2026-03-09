@@ -14,7 +14,6 @@ class Tools:
         """
         Get files metadata and get the user Email and user ID from the user object.
         """
-        print(f"__metadata__ \n\n{__metadata__}")
         # id and name of current files
         chat_context = {"files": [], "attached_images": []}
 

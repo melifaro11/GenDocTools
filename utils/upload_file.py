@@ -1,5 +1,7 @@
+import time
+
 from utils.logger import get_logger
-from requests import post
+from requests import post, get
 from json import dumps
 from io import BytesIO
 
@@ -28,7 +30,7 @@ def upload_file(url: str, token: str, file_data: BytesIO, filename:str, file_typ
     }
     
     mime_type = mime_types.get(file_type, 'application/octet-stream')
-    
+
     # Ensure the URL ends with '/api/v1/files/'
     url = f'{url}/api/v1/files/'
 
@@ -40,19 +42,51 @@ def upload_file(url: str, token: str, file_data: BytesIO, filename:str, file_typ
  
     # Handle file_like: assume it's a file-like object (e.g., BytesIO) with .name attribute set
     files = {'file': (f"{filename}.{file_type}", file_data, mime_type)}
+    # files = {'file': file_data}
 
     # params for the request
     params={"process": "true", "process_in_background": "false"}
 
     # Make the POST request to upload the file
     response = post(url, headers=headers, files=files, params=params, timeout=60)
+    # response = post(url, headers=headers, files=files, timeout=30)
 
     if response.status_code != 200:
        logger.error(f"=> Error uploading generated file: {response.status_code}, {response.text}")
        return dumps({"error":{"message": f'Error uploading file: {response.status_code}, {response.text}'}}), response
     elif response.status_code == 200:
-        logger.info("=> Generated file uploaded successfully.")
-        response_path_download = f"The file has been generated successfully! Provide to the user the following markdown hyperlink format `[Download {filename}.{file_type}](/api/v1/files/{response.json()['id']}/content)`. If you modify this hyperlink users will not be able to download the file."
+
+        file_data = response.json()
+        file_id = file_data['id']
+        logger.info(f"=> File uploaded with ID: {file_id}")
+
+        logger.info("=> Waiting for file processing...")
+        start_time = time.time()
+        timeout=300  # 5 minutes timeout for processing
+
+        while time.time() - start_time < timeout:
+                status_response = get(
+                    f'{url}{file_id}/process/status',
+                    headers=headers
+                )
+                status_data = status_response.json()
+                status = status_data.get('status')
+
+                logger.info(f"=> Current file processing status: {status} file id: {file_id}")
+                
+                if status == 'completed':
+                    logger.info(f"=> File processing completed! file id: {file_id}")
+                    break
+                elif status == 'failed':
+                    raise Exception(f"Processing failed: {status_data.get('error')}")
+                
+                time.sleep(2)  # Poll every 2 seconds
+        else:
+            logger.error(f"=> File processing timed out. file id: {file_id}")
+            raise TimeoutError("File processing timed out")
+
+        logger.info(f"=> Generated file uploaded successfully. file id: {file_id}")
+        response_path_download = f"The file has been generated successfully! Provide to the user the following markdown hyperlink format `[Download {filename}.{file_type}](/api/v1/files/{file_id}/content)`. If you modify this hyperlink users will not be able to download the file."
         return dumps({
             "file_path_download": response_path_download,
             },

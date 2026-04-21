@@ -26,8 +26,9 @@ def _env_list(name: str) -> list[str]:
 
 @dataclass(frozen=True)
 class Settings:
-    app_name: str = "GenDocTools"
-    app_version: str = "0.1.0"
+    app_name: str = os.getenv("APP_NAME", "GenDocTools")
+    app_version: str = os.getenv("APP_VERSION", "0.1.0")
+    app_mode: str = os.getenv("APP_MODE", "openapi")
 
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = _env_int("PORT", 8017)
@@ -37,7 +38,7 @@ class Settings:
 
     enable_auth: bool = _env_bool("ENABLE_AUTH", False)
     allow_anonymous: bool = _env_bool("ALLOW_ANONYMOUS", True)
-    tool_api_keys: list[str] = None
+    tool_api_keys: list[str] = None  # type: ignore[assignment]
 
     download_signing_secret: str = os.getenv(
         "DOWNLOAD_SIGNING_SECRET",
@@ -50,5 +51,6 @@ class Settings:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "tool_api_keys", _env_list("TOOL_API_KEYS"))
+
 
 settings = Settings()

@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from app.auth import UserContext, get_user_context
 from app.config import settings
 from app.models import (
+    CleanupResponse,
     DeleteFileResponse,
     FileInfo,
     FileListResponse,
@@ -30,8 +31,11 @@ def _file_info(stored: StoredFile) -> FileInfo:
         mime_type=stored.mime_type,
         size_bytes=stored.size_bytes,
         created_at=stored.created_at,
+        expires_at=stored.expires_at,
         owner=stored.user_hash,
         download_url=build_download_url(token),
+        download_count=stored.download_count,
+        last_downloaded_at=stored.last_downloaded_at,
     )
 
 
@@ -193,6 +197,24 @@ def create_app() -> FastAPI:
         storage.delete_file(user_hash=user.user_hash, file_id=file_id)
         return DeleteFileResponse(ok=True, file_id=file_id)
 
+    @app.post(
+        "/maintenance/cleanup",
+        response_model=CleanupResponse,
+        tags=["maintenance"],
+        operation_id="cleanup_expired_files",
+        summary="Delete expired generated files",
+    )
+    async def cleanup_expired_files(
+        current_user_only: bool = Query(default=True),
+        user: UserContext = Depends(get_user_context),
+    ) -> CleanupResponse:
+        result = storage.cleanup_expired(user_hash=user.user_hash if current_user_only else None)
+
+        return CleanupResponse(
+            deleted_files=result.deleted_files,
+            deleted_bytes=result.deleted_bytes,
+        )
+
     @app.get(
         "/download/{token}",
         tags=["files"],
@@ -200,7 +222,13 @@ def create_app() -> FastAPI:
     )
     async def download_file(token: str) -> FileResponse:
         payload = verify_download_token(token)
+
         stored = storage.get_file(
+            user_hash=payload["user_hash"],
+            file_id=payload["file_id"],
+        )
+
+        storage.mark_downloaded(
             user_hash=payload["user_hash"],
             file_id=payload["file_id"],
         )

@@ -42,8 +42,11 @@ class FileInfo(BaseModel):
     mime_type: str
     size_bytes: int
     created_at: datetime
+    expires_at: datetime | None = None
     owner: str
     download_url: str
+    download_count: int = 0
+    last_downloaded_at: datetime | None = None
 
 
 class GenerateFileResponse(BaseModel):
@@ -61,8 +64,14 @@ class DeleteFileResponse(BaseModel):
     file_id: str
 
 
-class HealthResponse(BaseModel):
+class CleanupResponse(BaseModel):
     ok: bool = True
-    app: str = "GenDocTools"
+    deleted_files: int
+    deleted_bytes: int
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    service: str = "GenDocTools"
     mode: Literal["openapi"] = "openapi"
     version: str

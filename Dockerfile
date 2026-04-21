@@ -1,52 +1,43 @@
-# Use Python 3.13 slim image based on Debian Bookworm as the base image
-FROM python:3.13-slim-bookworm
+FROM python:3.12-slim AS runtime
 
-# Copy the UV binary from an external container to the /bin directory
-COPY --from=ghcr.io/astral-sh/uv:0.10.4 /uv /uvx /bin/
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_NO_CACHE=1
 
-# Install system dependencies including pandoc
-RUN apt-get update && apt-get install -y \
-    libreoffice \
-    libreoffice-writer \
-    --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the project configuration files
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
 COPY pyproject.toml ./
-COPY uv.lock ./
+COPY README* ./
 
-# Copy template directorie into the container
-COPY src/ ./src/
-COPY utils/ ./utils/
-COPY tools/ ./tools/
+RUN uv pip install --system --no-cache -e . || true
 
-# Install dependencies using UV, leveraging cache for faster builds
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project
+COPY . .
 
-# Copy the main server script into the container
-COPY server.py .
+RUN uv pip install --system --no-cache \
+    fastapi \
+    "uvicorn[standard]" \
+    python-docx \
+    openpyxl \
+    python-pptx
 
-# Synchronize dependencies again to ensure everything is up-to-date
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen
+RUN groupadd --system gendoctools \
+    && useradd --system --gid gendoctools --home-dir /app gendoctools \
+    && mkdir -p /data \
+    && chown -R gendoctools:gendoctools /app /data
 
-# Create an unprivileged user and ensure the application directory is owned by that user.
-# Build steps above run as root (needed for package installation). At runtime we drop to
-# the unprivileged `app` user to reduce risk from container compromise.
-RUN groupadd -r app \
-    && useradd -r -g app -d /home/app -m -s /bin/bash app \
-    && chown -R app:app /app
+USER gendoctools
 
-# Set HOME and switch to the unprivileged user for runtime
-ENV HOME=/home/app
-USER app
+EXPOSE 8017
 
-# Expose the API port
-# EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:${PORT:-8017}/health || exit 1
 
-# Set the default command to run the server script (which respects the PORT env var)
-CMD ["uv", "run", "server.py"]
+CMD ["python", "openai_tool_server.py"]

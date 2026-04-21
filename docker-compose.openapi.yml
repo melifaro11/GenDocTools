@@ -1,0 +1,26 @@
+services:
+  gendoctools:
+    build:
+      context: .
+      dockerfile: Dockerfile.openapi
+    container_name: gendoctools
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      - "${PORT:-8017}:${PORT:-8017}"
+
+    volumes:
+      - gendoctools-data:/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${PORT:-8017}/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  gendoctools-data:

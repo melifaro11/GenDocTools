@@ -1,0 +1,194 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Literal
+
+from app.config import settings
+
+
+GeneratedKind = Literal["markdown", "docx", "xlsx", "pptx"]
+
+
+@dataclass(frozen=True)
+class GeneratedDocument:
+    filename: str
+    data: bytes
+    mime_type: str
+    kind: GeneratedKind
+
+
+def ensure_suffix(filename: str | None, title: str, suffix: str) -> str:
+    if filename:
+        name = filename.strip()
+    else:
+        normalized_title = title.strip().lower().replace(" ", "-")
+        name = normalized_title or "document"
+
+    if not name.lower().endswith(suffix):
+        name += suffix
+
+    return name
+
+
+class DocumentGenerationService:
+    """
+    Generation boundary for GenDocTools.
+
+    The OpenAPI layer should only call this service and should not know how
+    the actual file is produced.
+
+    In Step 2 this service still contains safe built-in generators.
+    In the next step we can replace selected methods with adapters around
+    the original GenDocTools/MCP generator modules.
+    """
+
+    def generate_markdown(
+        self,
+        *,
+        title: str,
+        content: str,
+        filename: str | None = None,
+    ) -> GeneratedDocument:
+        output_filename = ensure_suffix(filename, title, ".md")
+        markdown = self._render_markdown(title=title, content=content)
+
+        return GeneratedDocument(
+            filename=output_filename,
+            data=markdown.encode("utf-8"),
+            mime_type="text/markdown; charset=utf-8",
+            kind="markdown",
+        )
+
+    def generate_docx(
+        self,
+        *,
+        title: str,
+        content: str,
+        filename: str | None = None,
+    ) -> GeneratedDocument:
+        output_filename = ensure_suffix(filename, title, ".docx")
+        data = self._render_docx(title=title, content=content)
+
+        return GeneratedDocument(
+            filename=output_filename,
+            data=data,
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            kind="docx",
+        )
+
+    def generate_xlsx(
+        self,
+        *,
+        title: str,
+        rows: list[list[str | int | float | bool | None]],
+        filename: str | None = None,
+    ) -> GeneratedDocument:
+        output_filename = ensure_suffix(filename, title, ".xlsx")
+        data = self._render_xlsx(title=title, rows=rows)
+
+        return GeneratedDocument(
+            filename=output_filename,
+            data=data,
+            mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            kind="xlsx",
+        )
+
+    def generate_pptx(
+        self,
+        *,
+        title: str,
+        slides: list[str],
+        filename: str | None = None,
+    ) -> GeneratedDocument:
+        output_filename = ensure_suffix(filename, title, ".pptx")
+        data = self._render_pptx(title=title, slides=slides)
+
+        return GeneratedDocument(
+            filename=output_filename,
+            data=data,
+            mime_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            kind="pptx",
+        )
+
+    def _render_markdown(self, *, title: str, content: str) -> str:
+        return f"# {title.strip()}\n\n{content.strip()}\n"
+
+    def _render_docx(self, *, title: str, content: str) -> bytes:
+        from docx import Document
+
+        document = Document()
+        document.add_heading(title, level=1)
+
+        for paragraph in content.splitlines():
+            document.add_paragraph(paragraph)
+
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
+    def _render_xlsx(
+        self,
+        *,
+        title: str,
+        rows: list[list[str | int | float | bool | None]],
+    ) -> bytes:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "Sheet1"
+
+        if title:
+            worksheet.append([title])
+            worksheet["A1"].font = Font(bold=True, size=14)
+            worksheet.append([])
+
+        if rows:
+            for row in rows:
+                worksheet.append(row)
+        else:
+            worksheet.append(["No rows provided"])
+
+        for column_cells in worksheet.columns:
+            max_length = 0
+            column_letter = column_cells[0].column_letter
+
+            for cell in column_cells:
+                value = "" if cell.value is None else str(cell.value)
+                max_length = max(max_length, len(value))
+
+            worksheet.column_dimensions[column_letter].width = min(max(max_length + 2, 10), 80)
+
+        buffer = BytesIO()
+        workbook.save(buffer)
+        return buffer.getvalue()
+
+    def _render_pptx(self, *, title: str, slides: list[str]) -> bytes:
+        from pptx import Presentation
+
+        presentation = Presentation()
+
+        normalized_slides = slides or ["Generated by GenDocTools"]
+
+        for index, slide_text in enumerate(normalized_slides):
+            layout = presentation.slide_layouts[0] if index == 0 else presentation.slide_layouts[1]
+            slide = presentation.slides.add_slide(layout)
+
+            if index == 0:
+                slide.shapes.title.text = title
+                if len(slide.placeholders) > 1:
+                    slide.placeholders[1].text = slide_text
+            else:
+                slide.shapes.title.text = f"{title} — {index + 1}"
+                if len(slide.placeholders) > 1:
+                    slide.placeholders[1].text = slide_text
+
+        buffer = BytesIO()
+        presentation.save(buffer)
+        return buffer.getvalue()
+
+
+document_service = DocumentGenerationService()

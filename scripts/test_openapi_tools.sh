@@ -13,15 +13,24 @@ curl -sS "$BASE_URL/openapi.json" | jq '.info.title'
 
 echo
 echo "== Generate Markdown =="
-curl -sS -X POST "$BASE_URL/tools/generate_markdown" \
+MARKDOWN_RESPONSE="$(curl -sS -X POST "$BASE_URL/tools/generate_markdown" \
   -H 'Content-Type: application/json' \
   -H "X-OpenWebUI-User-Id: $USER_ID" \
   -d '{
     "title": "Hello GenDocTools",
     "content": "This is a test Markdown document.",
     "filename": "hello-gendoctools.md"
-  }' | jq
+  }')"
+echo "$MARKDOWN_RESPONSE" | jq
+MARKDOWN_URL="$(echo "$MARKDOWN_RESPONSE" | jq -r '.file.download_url')"
 
+echo
+echo "== Download Markdown =="
+curl -sSL "$MARKDOWN_URL" -o /tmp/gendoctools-test.md
+ls -lh /tmp/gendoctools-test.md
+cat /tmp/gendoctools-test.md
+
+echo
 echo
 echo "== Generate DOCX =="
 curl -sS -X POST "$BASE_URL/tools/generate_docx" \
@@ -66,4 +75,9 @@ curl -sS -X POST "$BASE_URL/tools/generate_pptx" \
 echo
 echo "== List files =="
 curl -sS "$BASE_URL/files" \
+  -H "X-OpenWebUI-User-Id: $USER_ID" | jq
+
+echo
+echo "== Cleanup current user expired files =="
+curl -sS -X POST "$BASE_URL/maintenance/cleanup?current_user_only=true" \
   -H "X-OpenWebUI-User-Id: $USER_ID" | jq
